@@ -3,6 +3,17 @@ const assert=require('node:assert/strict');
 
 const shared=require('../netlify/functions/_shared');
 const {predictionProb,collectOdds,teamForm,venueForm,headToHead,teamDataQuality}=require('../netlify/functions/_sports').__test;
+const {hasNumber,fmtPct,fmtOdds}=require('../public/ui-format');
+
+test('a hianyzo feluleti ertek nem valik hamis nulla szazalekka',()=>{
+  for(const value of [null,undefined,'']){
+    assert.equal(hasNumber(value),false);
+    assert.equal(fmtPct(value),'—');
+    assert.equal(fmtOdds(value),'—');
+  }
+  assert.equal(hasNumber(0),true);
+  assert.equal(fmtPct(0),'0.0%');
+});
 
 test('hianyzo prediction nem gyart 33-33-33 szazalekot',()=>{
   assert.equal(predictionProb({predictions:{}}),null);
