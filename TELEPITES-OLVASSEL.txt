@@ -1,9 +1,9 @@
-TIPP RADAR – SPORTELEMZŐ V6
+TIPP RADAR – SPORTELEMZŐ V6.0.2
 ============================
 
 VERZIÓ ÉS CÉL
 --------------
-Modellverzió: v6.0.1
+Modellverzió: v6.0.2
 
 A Tipp Radar valós sport- és oddsadatokból valószínűségi becslést készít.
 Nem ígér garantált vagy „TUTI” eredményt. Ha az adat hiányos, gyenge,
@@ -53,7 +53,14 @@ A migráció többek között létrehozza vagy bővíti:
 V6 MŰKÖDÉS
 -----------
 - Csak legalább 5 perccel később kezdődő esemény jelenhet meg aktív elemzésként.
-- Az elemzési cache legfeljebb 60 percig, illetve az első kezdés előtt 5 percig él.
+- A kézi elemzési cache legfeljebb 60 percig, illetve az első kezdés előtt 5 percig él.
+- A 02:00 UTC-kor induló automatikus napi elemzés mind a 9 sportot feldolgozza,
+  Supabase-be menti a modellfutásokat és a fogadásra alkalmas tippeket, valamint
+  eltárolja a napi TOP 5 összesítést.
+- Az automatikus napi elemzés cache-e 26 óráig él; a megkezdődött eseményeket a
+  felület ettől függetlenül kiszűri.
+- A napi háttérfeldolgozás állapota a /.netlify/functions/daily-status végponton
+  ellenőrizhető.
 - Az azonos elemzési kéréseket a rendszer összevonja, és Supabase lockkal védi.
 - A /api/today Netlify function látogatónként korlátozza a kéréseket.
 - A napi automatikus elszámolás 02:15 UTC-kor fut.
@@ -61,6 +68,18 @@ V6 MŰKÖDÉS
 - 100 értékelhető lezárt eredmény alatt a kalibráció kis mintát jelez.
 - A rendes játékidős 1X2 és a hosszabbítást is tartalmazó győztes piac külön piac.
 - MMA és Formula–1 jelenleg információs modul, nem ad eltárolt fogadási tippet.
+
+V6.0.2 AUTOMATIKUS NAPI MŰKÖDÉS
+--------------------------------
+02:00 UTC: a daily-analysis-scheduled ütemezett függvény biztonságosan elindítja
+a daily-analysis-background háttérfeladatot. A háttérfeladat legfeljebb három
+sportot dolgoz fel párhuzamosan, ezért nem lépi túl a Scheduled Function rövid
+futási idejét. Magyar nyári idő szerint ez 04:00, téli idő szerint 03:00.
+
+02:15 UTC: a settle-scheduled lezárja a korábbi, eredménnyel rendelkező tippeket.
+
+A háttérfeladat HMAC-hitelesítést használ a már meglévő Supabase szerveroldali
+titokkal. Új környezeti változó és új Supabase-migráció nem szükséges.
 
 CSAPATSPORTMODELL
 -----------------

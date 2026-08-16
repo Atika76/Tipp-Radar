@@ -8,6 +8,9 @@
 [functions."settle-scheduled"]
   schedule = "15 2 * * *"
 
+[functions."daily-analysis-scheduled"]
+  schedule = "0 2 * * *"
+
 [[headers]]
   for = "/*"
   [headers.values]
