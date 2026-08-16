@@ -146,16 +146,28 @@ async function recentGames(sport,teamId,season,before){
 }
 
 function teamForm(rows,teamId){
-  let games=0,wins=0,weightSum=0,weightedWins=0,weightedScored=0,weightedAllowed=0,lastDate=null,venueGames=0,venueWins=0;
+  let games=0,wins=0,weightSum=0,weightedWins=0,weightedScored=0,weightedAllowed=0,lastDate=null;
   for(const [index,g] of (rows||[]).entries()){
     const home=teamSide(g,'home'),away=teamSide(g,'away'); const hs=scoreFromGame(g,'home'),as=scoreFromGame(g,'away');
     if(!home||!away||!Number.isFinite(hs)||!Number.isFinite(as))continue;
     const isHome=Number(home.id)===Number(teamId); if(!isHome&&Number(away.id)!==Number(teamId))continue;
     const pf=isHome?hs:as,pa=isHome?as:hs,weight=Math.pow(.86,index); games++;weightSum+=weight;weightedScored+=pf*weight;weightedAllowed+=pa*weight;if(pf>pa){wins++;weightedWins+=weight;}
-    if(isHome){venueGames++;if(pf>pa)venueWins++;}
     const d=eventDate(g);if(!lastDate&&d)lastDate=d;
   }
-  return {games,wins,winRate:weightSum?weightedWins/weightSum:null,scored:weightSum?weightedScored/weightSum:null,allowed:weightSum?weightedAllowed/weightSum:null,diff:weightSum?(weightedScored-weightedAllowed)/weightSum:null,lastDate,venueGames,venueWinRate:venueGames?venueWins/venueGames:null};
+  return {games,wins,winRate:weightSum?weightedWins/weightSum:null,scored:weightSum?weightedScored/weightSum:null,allowed:weightSum?weightedAllowed/weightSum:null,diff:weightSum?(weightedScored-weightedAllowed)/weightSum:null,lastDate};
+}
+function venueForm(rows,teamId,venue){
+  if(venue!=='home'&&venue!=='away')throw new Error('A venue csak home vagy away lehet.');
+  let games=0,wins=0,weightSum=0,weightedWins=0,weightedScored=0,weightedAllowed=0;
+  for(const [index,g] of (rows||[]).entries()){
+    const home=teamSide(g,'home'),away=teamSide(g,'away'),hs=scoreFromGame(g,'home'),as=scoreFromGame(g,'away');
+    if(!home||!away||!Number.isFinite(hs)||!Number.isFinite(as))continue;
+    const isRequestedVenue=venue==='home'?Number(home.id)===Number(teamId):Number(away.id)===Number(teamId);
+    if(!isRequestedVenue)continue;
+    const pf=venue==='home'?hs:as,pa=venue==='home'?as:hs,weight=Math.pow(.86,index);
+    games++;weightSum+=weight;weightedScored+=pf*weight;weightedAllowed+=pa*weight;if(pf>pa){wins++;weightedWins+=weight;}
+  }
+  return {venue,games,wins,sufficient:games>=3,winRate:weightSum?weightedWins/weightSum:null,scored:weightSum?weightedScored/weightSum:null,allowed:weightSum?weightedAllowed/weightSum:null,diff:weightSum?(weightedScored-weightedAllowed)/weightSum:null};
 }
 function headToHead(rows,homeId,awayId){
   const seen=new Set();let games=0,homeWins=0,draws=0,margin=0;
@@ -193,12 +205,14 @@ function evaluateTeamMarkets(sport,event,odds,model){
 }
 function opt(market,label,prob,odd){ const p=Number(prob),o=Number(odd); return {market,label,prob:p,odd:o,fair:p>0?100/p:null,ev:Number.isFinite(o)?(p/100*o-1)*100:-999}; }
 
-function buildTeamModel(sport,event,hf,af,odds,injuries={home:0,away:0},h2h={games:0}){
+function buildTeamModel(sport,event,hf,af,odds,injuries={home:0,away:0},h2h={games:0},venues={home:{sufficient:false},away:{sufficient:false}}){
   const cfg=MODEL[sport]; const formSufficient=hf.games>=5&&af.games>=5;
+  const venueSufficient=Boolean(venues.home?.sufficient&&venues.away?.sufficient);
   let predMargin=0,predTotal=null,probs;
   if(formSufficient){
     if(sport==='volleyball'){
-      const rawHome=clamp(.5+(hf.winRate-af.winRate)*.55+cfg.homeAdv,0.12,.88); probs={home:rawHome*100,away:(1-rawHome)*100}; predMargin=(rawHome-.5)*2; predTotal=null;
+      const venueEdge=venueSufficient?(venues.home.winRate-venues.away.winRate)*.12:0;
+      const rawHome=clamp(.5+(hf.winRate-af.winRate)*.55+cfg.homeAdv+venueEdge,0.12,.88); probs={home:rawHome*100,away:(1-rawHome)*100}; predMargin=(rawHome-.5)*2; predTotal=null;
     }else{
       const expHome=((hf.scored??0)+(af.allowed??0))/2+cfg.homeAdv/2;
       const expAway=((af.scored??0)+(hf.allowed??0))/2-cfg.homeAdv/2;
@@ -206,7 +220,7 @@ function buildTeamModel(sport,event,hf,af,odds,injuries={home:0,away:0},h2h={gam
       const hr=restDays(hf.lastDate,event.kickoff),ar=restDays(af.lastDate,event.kickoff);
       if(Number.isFinite(hr)&&Number.isFinite(ar)) predMargin+=clamp((hr-ar)*.22,-1.8,1.8);
       if(sport==='nfl') predMargin+=clamp((injuries.away-injuries.home)*.22,-2.2,2.2);
-      if(Number.isFinite(hf.venueWinRate)&&Number.isFinite(af.venueWinRate))predMargin+=clamp((hf.venueWinRate-af.venueWinRate)*cfg.sigmaMargin*.10,-cfg.sigmaMargin*.12,cfg.sigmaMargin*.12);
+      if(venueSufficient)predMargin+=clamp((venues.home.winRate-venues.away.winRate)*cfg.sigmaMargin*.10,-cfg.sigmaMargin*.12,cfg.sigmaMargin*.12);
       if(h2h.games>=2&&Number.isFinite(h2h.margin))predMargin+=clamp(h2h.margin*.18,-cfg.sigmaMargin*.15,cfg.sigmaMargin*.15);
       const baseHome=normalCdf(predMargin/cfg.sigmaMargin);
       if(cfg.drawBase){ const draw=clamp(cfg.drawBase*Math.exp(-Math.abs(predMargin)/3),.025,.14); probs={home:baseHome*(1-draw)*100,draw:draw*100,away:(1-baseHome)*(1-draw)*100}; }
@@ -217,7 +231,10 @@ function buildTeamModel(sport,event,hf,af,odds,injuries={home:0,away:0},h2h={gam
     probs={};
   }
   const reliability=clamp(Math.min(hf.games,af.games)/8,0,1);if(formSufficient&&reliability<1&&probs.home!=null){if(probs.draw!=null)probs=normalize3(50+(probs.home-50)*reliability,probs.draw,50+(probs.away-50)*reliability);else probs=normalize2(50+(probs.home-50)*reliability,50+(probs.away-50)*reliability);}
-  return {formSufficient,predMargin,predTotal,probabilities:probs,homeForm:hf,awayForm:af,injuries,h2h,reliability};
+  return {formSufficient,venueSufficient,predMargin,predTotal,probabilities:probs,homeForm:hf,awayForm:af,venues,injuries,h2h,reliability};
+}
+function teamDataQuality(model,odds,sport,injuries={home:0,away:0}){
+  return Math.round(clamp((model.reliability*40)+(model.venueSufficient?15:0)+(odds.bookmakerCount>=2?30:odds.bookmakerCount?18:0)+(model.h2h?.games>=2?10:0)+(sport==='nfl'&&injuries.home+injuries.away?5:0),0,100));
 }
 
 async function nflInjuries(event){
@@ -234,8 +251,8 @@ async function nflInjuries(event){
 
 async function analyseTeamEvent(sport,event,odds){
   const [hg,ag]=await Promise.all([recentGames(sport,event.home.id,event.season,event.kickoff),recentGames(sport,event.away.id,event.season,event.kickoff)]);
-  const hf=teamForm(hg,event.home.id),af=teamForm(ag,event.away.id),h2h=headToHead([...hg,...ag],event.home.id,event.away.id); const injuries=sport==='nfl'?await nflInjuries(event):{home:0,away:0};
-  const model=buildTeamModel(sport,event,hf,af,odds,injuries,h2h); const sel=evaluateTeamMarkets(sport,event,odds,model);
+  const hf=teamForm(hg,event.home.id),af=teamForm(ag,event.away.id),venues={home:venueForm(hg,event.home.id,'home'),away:venueForm(ag,event.away.id,'away')},h2h=headToHead([...hg,...ag],event.home.id,event.away.id); const injuries=sport==='nfl'?await nflInjuries(event):{home:0,away:0};
+  const model=buildTeamModel(sport,event,hf,af,odds,injuries,h2h,venues); const sel=evaluateTeamMarkets(sport,event,odds,model);
   const coverageScore=(model.formSufficient?2:0)+(odds.bookmakerCount?2:0)+(sport==='nfl'&&(injuries.home+injuries.away>0)?1:0);
   const coverage=coverageScore>=4?'Magas':coverageScore>=2?'Közepes':'Alacsony';
   let rating='red'; if(sel&&model.formSufficient&&coverage==='Magas'&&odds.bookmakerCount>=2&&sel.odd>=1.35&&sel.prob>=55&&sel.ev>=7)rating='green'; else if(sel&&model.formSufficient&&odds.bookmakerCount>=1&&sel.prob>=51&&sel.ev>=2)rating='yellow';
@@ -243,6 +260,8 @@ async function analyseTeamEvent(sport,event,odds){
   if(!model.formSufficient)reasons.push('Nincs elég friss, lezárt mérkőzés a saját forma-modellhez, ezért a rendszer nem erőltet tippet.');
   else{
     reasons.push(`Utolsó ${hf.games}/${af.games} meccs: ${event.home.name} ${Math.round((hf.winRate||0)*100)}% győzelem, ${event.away.name} ${Math.round((af.winRate||0)*100)}%.`);
+    if(model.venueSufficient)reasons.push(`Venue-forma: ${event.home.name} otthon ${Math.round(venues.home.winRate*100)}%, ${event.away.name} idegenben ${Math.round(venues.away.winRate*100)}% győzelmi arány.`);
+    else reasons.push(`A venue-formához kevés az adat (hazai otthon ${venues.home.games}, vendég idegenben ${venues.away.games}); nincs venue-korrekció, az adatminőség csökkent.`);
     if(sport!=='volleyball'&&Number.isFinite(model.predMargin))reasons.push(`A saját pont/gólmodell várható különbsége: ${model.predMargin>=0?'+':''}${model.predMargin.toFixed(1)} a hazai csapat szemszögéből.`);
     if(h2h.games>=2)reasons.push(`Egymás ellen ${h2h.games} lezárt meccs áll rendelkezésre; hazai nézőpontú átlagkülönbség ${h2h.margin>=0?'+':''}${h2h.margin.toFixed(1)}.`);
     if(sport==='nfl'&&(injuries.home+injuries.away))reasons.push(`Elérhető sérülés-adatok: hazai ${injuries.home}, vendég ${injuries.away}.`);
@@ -255,8 +274,8 @@ async function analyseTeamEvent(sport,event,odds){
     market:sel?.market||'NONE',marketLabel:sel?.label||'Nincs megfelelő piac',probability:sel?Number(sel.prob.toFixed(2)):null,
     fairOdds:sel?.fair?Number(sel.fair.toFixed(2)):null,marketOdds:sel?.odd?Number(sel.odd.toFixed(2)):null,edge:sel&&sel.ev>-900?Number(sel.ev.toFixed(2)):null,rating,
     probabilities:Object.fromEntries(Object.entries(model.probabilities||{}).filter(([,v])=>Number.isFinite(v)).map(([k,v])=>[k,Number(v.toFixed(1))])),injuries,modelValid:model.formSufficient,
-    apiAdvice:null,coverage,modelName:MODEL[sport].modelName,reasons:reasons.slice(0,5),bookmakerCount:odds.bookmakerCount,marketPeriod:sel?.marketPeriod||'full',dataQuality:Math.round(clamp((model.reliability*55)+(odds.bookmakerCount>=2?30:odds.bookmakerCount?18:0)+(h2h.games>=2?10:0)+(sport==='nfl'&&injuries.home+injuries.away?5:0),0,100)),
-    evidence:{homeGames:hf.games,awayGames:af.games,weightedHomeWinRate:hf.winRate,weightedAwayWinRate:af.winRate,headToHead:h2h,predMargin:model.predMargin,predTotal:model.predTotal,homeRest:restDays(hf.lastDate,event.kickoff),awayRest:restDays(af.lastDate,event.kickoff)}
+    apiAdvice:null,coverage,modelName:MODEL[sport].modelName,reasons:reasons.slice(0,5),bookmakerCount:odds.bookmakerCount,marketPeriod:sel?.marketPeriod||'full',dataQuality:teamDataQuality(model,odds,sport,injuries),
+    evidence:{homeGames:hf.games,awayGames:af.games,weightedHomeWinRate:hf.winRate,weightedAwayWinRate:af.winRate,homeVenueForm:venues.home,awayVenueForm:venues.away,headToHead:h2h,predMargin:model.predMargin,predTotal:model.predTotal,homeRest:restDays(hf.lastDate,event.kickoff),awayRest:restDays(af.lastDate,event.kickoff)}
   };
 }
 
@@ -377,4 +396,4 @@ async function analyseSportDay(sport,date){
   throw new Error(`Nem támogatott sport: ${sport}`);
 }
 
-module.exports={analyseSportDay,__test:{predictionProb,notStarted,footballScore,collectOdds,teamForm,headToHead,buildTeamModel,evaluateTeamMarkets}};
+module.exports={analyseSportDay,__test:{predictionProb,notStarted,footballScore,collectOdds,teamForm,venueForm,headToHead,buildTeamModel,teamDataQuality,evaluateTeamMarkets}};
