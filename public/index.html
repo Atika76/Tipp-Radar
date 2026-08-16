@@ -62,7 +62,7 @@
         <div id="performance" class="performance-grid">
           <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
         </div>
-        <p class="muted small">Csak a kezdés előtt eltárolt, automatikusan lezárható zöld tippeket számoljuk. A kis minta nem bizonyít jövőbeli eredményt.</p>
+        <p id="calibrationNote" class="muted small">Csak a kezdés előtt eltárolt, automatikusan lezárható zöld tippeket számoljuk. A kis minta nem bizonyít jövőbeli eredményt.</p>
       </article>
     </section>
 
@@ -119,14 +119,15 @@
         <div><strong>⚾ Baseball</strong><span>Futásátlag, forma, moneyline és total.</span></div>
         <div><strong>🤾 Kézilabda</strong><span>Gólkülönbség, forma, hendikep és total.</span></div>
         <div><strong>🏐 Röplabda</strong><span>Szettforma és győzelmi arány, moneyline.</span></div>
-        <div><strong>🥊 MMA</strong><span>Harcos-mérleg + fight winner odds; kevés adatnál automatikus kihagyás.</span></div>
-        <div><strong>🏎️ F1</strong><span>Verseny és pilótarangsor; a többversenyzős F1 odds-feldolgozás külön modul, hiányzó modellnél nincs kitalált value tipp.</span></div>
+        <div><strong>🥊 MMA</strong><span>Információs modul. Kalibrált és automatikusan elszámolható modell nélkül nem ad fogadási tippet.</span></div>
+        <div><strong>🏎️ F1</strong><span>Információs modul. A többversenyzős piac és megbízható visszamérés nélkül nincs kitalált value tipp.</span></div>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Tipp Radar • V5 • valószínűségi elemzőeszköz, nem garantált fogadási eredmény. A sportfogadás kockázattal jár.</p>
+    <p><strong>18+</strong> • Tipp Radar V6 • valószínűségi elemzőeszköz, nem garantált fogadási eredmény. A sportfogadás pénzügyi veszteséget és függőséget okozhat.</p>
+    <nav class="legal-nav" aria-label="Jogi és biztonsági információk"><a href="felelos-jatek.html">Felelős játék</a><a href="modell-atlathatosag.html">Modell-átláthatóság</a><a href="adatkezeles.html">Adatkezelés</a></nav>
   </footer>
 
   <template id="pickTemplate">

@@ -1,10 +1,10 @@
 {
   "name": "tipp-radar",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "private": true,
   "description": "Valos adatokra epulo, ovatos multisport valoszinusegi elemzo.",
   "scripts": {
-    "check": "node --check netlify/functions/_shared.js && node --check netlify/functions/_sports.js && node --check netlify/functions/today.js && node --check netlify/functions/performance.js && node --check netlify/functions/health.js && node --check public/app.js",
+    "check": "node --check netlify/functions/_shared.js && node --check netlify/functions/_sports.js && node --check netlify/functions/today.js && node --check netlify/functions/performance.js && node --check netlify/functions/calibration.js && node --check netlify/functions/settle-scheduled.js && node --check netlify/functions/health.js && node --check public/app.js",
     "test": "node --test tests/*.test.js"
   }
 }

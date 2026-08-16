@@ -1,0 +1,4 @@
+supabase/.temp/
+supabase/.temp-stale/
+node_modules/
+.netlify/
