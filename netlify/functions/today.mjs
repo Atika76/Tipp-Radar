@@ -1,10 +1,10 @@
-import {createRequire} from 'node:module';
+import shared from './_shared.js';
+import sports from './_sports.js';
 
-const require=createRequire(import.meta.url);
 const {
   json,todayBudapest,apiConfigured,supabaseConfigured,getCache,putCache,savePicks,recordModelRun,filterUpcomingPicks,cacheExpiryForPicks,demoPayload,SPORT_CONFIG,MODEL_VERSION,singleFlight,claimAnalysisLock,releaseAnalysisLock
-}=require('./_shared.js');
-const {analyseSportDay}=require('./_sports.js');
+}=shared;
+const {analyseSportDay}=sports;
 
 export async function handler(event){
   const date=todayBudapest();
