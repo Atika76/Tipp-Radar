@@ -250,9 +250,7 @@ function cacheExpiryForPicks(picks,now=Date.now()) {
 
 function demoPayload(date,sport='football') {
   const cfg=SPORT_CONFIG[sport]||SPORT_CONFIG.football;
-  return {sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,date,generatedAt:new Date().toISOString(),totalEvents:12,eligibleEvents:2,demo:true,persistence:false,picks:[{
-    sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,fixtureId:syntheticId(sport,1),sourceId:1,league:'DEMO Liga',country:'Minta',home:'Kék',away:'Fehér',kickoff:new Date(Date.now()+3600000).toISOString(),recommendation:'Kék – győzelem',market:'ML_HOME',marketLabel:'Győztes',probability:62.4,fairOdds:1.60,marketOdds:1.88,edge:17.3,rating:'green',probabilities:{home:62.4,away:37.6},injuries:{home:0,away:0},apiAdvice:'Demo adat',coverage:'Magas',modelName:`${cfg.label} saját modell`,reasons:['Ez bemutató adat. Éles API-kulccsal valódi események jelennek meg.']
-  }]};
+  return {sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,date,generatedAt:new Date().toISOString(),totalEvents:0,eligibleEvents:0,demo:true,persistence:false,note:'Az API-kulcs nincs beállítva ebben a környezetben. A rendszer nem jelenít meg minta tippet vagy mesterséges valószínűséget.',picks:[]};
 }
 
 module.exports={json,TZ,SPORT_CONFIG,todayBudapest,yesterdayBudapest,dateDaysAgoBudapest,apiConfigured,supabaseConfigured,sportApi,football,supa,getCache,putCache,cachedSportCall,parsePercent,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,sourceIdFromSynthetic,parseSportTag,withSportTag,savePicks,scoreFromGame,rawGameId,isFinished,resultFromRaw,settleMarket,settleYesterday,settleRecentPicks,isFutureKickoff,filterUpcomingPicks,cacheExpiryForPicks,demoPayload};

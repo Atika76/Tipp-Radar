@@ -39,3 +39,10 @@ test('moneyline spread es total elszamolas determinisztikus',()=>{
   assert.deepEqual(shared.settleMarket('SPREAD_AWAY:+1.5',{home:2,away:1}),{won:true,push:false});
   assert.deepEqual(shared.settleMarket('TOTAL_UNDER:3',{home:1,away:2}),{won:null,push:true});
 });
+
+test('API nelkuli demo mod nem mutat mesterseges tippet',()=>{
+  const demo=shared.demoPayload('2026-08-16','football');
+  assert.equal(demo.demo,true);
+  assert.equal(demo.totalEvents,0);
+  assert.deepEqual(demo.picks,[]);
+});
