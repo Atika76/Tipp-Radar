@@ -42,4 +42,4 @@ exports.handler=async(event)=>{
   });
 };
 
-exports.config={rateLimit:{windowLimit:24,windowSize:60,aggregateBy:['ip','domain']}};
+exports.config={path:'/.netlify/functions/today',rateLimit:{windowLimit:24,windowSize:60,aggregateBy:['ip','domain']}};

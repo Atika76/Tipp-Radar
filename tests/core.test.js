@@ -2,7 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 
 const shared=require('../netlify/functions/_shared');
-const {predictionProb,collectOdds,teamForm,headToHead}=require('../netlify/functions/_sports').__test;
+const {predictionProb,collectOdds,teamForm,venueForm,headToHead,teamDataQuality}=require('../netlify/functions/_sports').__test;
 
 test('hianyzo prediction nem gyart 33-33-33 szazalekot',()=>{
   assert.equal(predictionProb({predictions:{}}),null);
@@ -57,6 +57,33 @@ test('frissebb forma nagyobb sulyt kap es a h2h deduplikalt',()=>{
   const rows=[game(2,'2026-08-10',1,3,10,0),game(1,'2026-08-01',1,2,0,10)];
   assert.ok(teamForm(rows,1).winRate>.5);
   assert.equal(headToHead([rows[1],rows[1]],1,2).games,1);
+});
+
+test('a vendeg venue-forma csak az idegenbeli merkozeseket hasznalja',()=>{
+  const game=(id,date,homeId,awayId,home,away)=>({id,date,status:{short:'FT'},teams:{home:{id:homeId,name:'H'},away:{id:awayId,name:'A'}},scores:{home:{total:home},away:{total:away}}});
+  const rows=[
+    game(1,'2026-08-12',7,2,0,3),
+    game(2,'2026-08-10',2,8,5,0),
+    game(3,'2026-08-08',9,2,2,1),
+    game(4,'2026-08-06',10,2,1,2)
+  ];
+  const away=venueForm(rows,2,'away');
+  assert.equal(away.games,3);
+  assert.equal(away.wins,2);
+  assert.equal(away.sufficient,true);
+  assert.ok(away.winRate>.5);
+});
+
+test('keves venue-adat csokkenti az adatminoseget es nem kap venue-korrekciot',()=>{
+  const base={reliability:1,h2h:{games:0}};const odds={bookmakerCount:2};
+  const insufficient={...base,venueSufficient:false};const sufficient={...base,venueSufficient:true};
+  assert.equal(teamDataQuality(sufficient,odds,'basketball')-teamDataQuality(insufficient,odds,'basketball'),15);
+});
+
+test('a today rate limit explicit Netlify path-hoz tartozik',()=>{
+  const {config}=require('../netlify/functions/today');
+  assert.equal(config.path,'/.netlify/functions/today');
+  assert.equal(config.rateLimit.windowLimit,24);
 });
 
 test('API nelkuli demo mod nem mutat mesterseges tippet',()=>{

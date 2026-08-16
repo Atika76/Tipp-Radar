@@ -1,142 +1,115 @@
-TIPP RADAR – SPORTELEMZŐ V5
+TIPP RADAR – SPORTELEMZŐ V6
+============================
 
-V5 – VALÓS ADAT, LEJÁRATVÉDELEM ÉS VISSZAMÉRÉS
-=====================================================
-- A rendszer nem ígér garantált eredményt. Sporteredményt maximális bizonyossággal előre jelezni nem lehet.
-- Foci és minden más sport: elkezdődött, lejárt vagy hibás időpontú esemény nem lehet aktív tipp.
-- Az elemzési cache legfeljebb 60 percig, illetve az első esemény kezdése előtt 5 percig érvényes.
-- A függő tippek elszámolása 7 napra visszamenőleg automatikusan pótolható.
-- Zöld csapatsport-tipphez legalább 5-5 lezárt formameccs, legalább 2 bookmaker és szigorúbb value-küszöb kell.
-- MMA és F1 jelenleg információs modul: nem ad eltárolt fogadási tippet, amíg nincs megbízható kalibráció és automatikus elszámolás.
-- A teljesítménykártya külön mutatja a lezárt és a függő zöld tippeket.
-- Beépített Node tesztek védik a prediction-, lejárat-, cache- és elszámolási logikát.
+VERZIÓ ÉS CÉL
+--------------
+Modellverzió: v6.0.0
 
-ELLENŐRZÉS
-----------
+A Tipp Radar valós sport- és oddsadatokból valószínűségi becslést készít.
+Nem ígér garantált vagy „TUTI” eredményt. Ha az adat hiányos, gyenge,
+ellentmondásos vagy már lejárt, a helyes eredmény a kihagyás.
+
+ÉLES RENDSZER
+-------------
+GitHub:  https://github.com/Atika76/Tipp-Radar
+Netlify: https://tipp-radar.netlify.app
+Supabase projektazonosító: xbpvhjypxepeicvitlox
+
+Az éles Netlify környezet a GitHub main ághoz kapcsolódik. A Supabase
+service-role/secret kulcsot tilos a public mappába, a kliensoldali JavaScriptbe
+vagy a GitHub repóba írni.
+
+KÖRNYEZETI VÁLTOZÓK A NETLIFY-ON
+---------------------------------
+1) API_SPORTS_KEY vagy API_FOOTBALL_KEY
+2) SUPABASE_URL
+3) SUPABASE_SECRET_KEY vagy SUPABASE_SERVICE_ROLE_KEY
+
+Ha API_SPORTS_KEY és API_FOOTBALL_KEY is létezik, az API_SPORTS_KEY az
+elsődleges. A konkrét kulcsértékeket ez a fájl szándékosan nem tartalmazza.
+
+SUPABASE V6 MIGRÁCIÓ
+--------------------
+A V6 migráció fájlja:
+
+supabase/migrations/20260816185000_v6_model_tracking.sql
+
+A JELENLEGI, xbpvhjypxepeicvitlox AZONOSÍTÓJÚ ÉLES SUPABASE PROJEKTEN EZ A
+MIGRÁCIÓ MÁR SIKERESEN LEFUTOTT. A helyi és a távoli migrációazonosító egyezik,
+ezért ezen az éles projekten nem kell és nem szabad kézzel újra futtatni.
+
+Új vagy üres Supabase projekt telepítésekor viszont a migrációt egyszer,
+a Supabase migrációs folyamattal alkalmazni kell. A GitHubra feltöltött SQL fájl
+önmagában nem módosít egy adatbázist.
+
+A migráció többek között létrehozza vagy bővíti:
+- picks.model_version, model_family, data_quality, market_period és evidence;
+- model_runs;
+- settlement_runs;
+- analysis_locks;
+- model_calibration;
+- claim_analysis_lock és release_analysis_lock függvények.
+
+V6 MŰKÖDÉS
+-----------
+- Csak legalább 5 perccel később kezdődő esemény jelenhet meg aktív elemzésként.
+- Az elemzési cache legfeljebb 60 percig, illetve az első kezdés előtt 5 percig él.
+- Az azonos elemzési kéréseket a rendszer összevonja, és Supabase lockkal védi.
+- A today Netlify function látogatónként korlátozza a kéréseket.
+- A napi automatikus elszámolás 02:15 UTC-kor fut.
+- Az elszámolás modellverziót, eredményt, profitot és Brier-hibát tárol.
+- 100 értékelhető lezárt eredmény alatt a kalibráció kis mintát jelez.
+- A rendes játékidős 1X2 és a hosszabbítást is tartalmazó győztes piac külön piac.
+- MMA és Formula–1 jelenleg információs modul, nem ad eltárolt fogadási tippet.
+
+CSAPATSPORTMODELL
+-----------------
+- A frissebb lezárt mérkőzések nagyobb súlyt kapnak.
+- Külön számolódik az általános forma és a venue-forma.
+- A hazai csapat venue-formájába csak a korábbi hazai mérkőzések kerülnek.
+- A vendégcsapat venue-formájába csak a korábbi idegenbeli mérkőzések kerülnek.
+- Legalább 3-3 megfelelő venue-meccs alatt nincs venue-korrekció, és csökken az
+  adatminőségi pontszám; a rendszer nem gyárt helyettesítő venue-értéket.
+- Figyelembe vehető a pihenőidő, az egymás elleni eredmény és NFL-nél az
+  elérhető sérülésadat.
+
+FOCI
+----
+A V6 foci jelenleg API-Football prediction, sérülésadat és rendes játékidős
+1X2 odds alapján dolgozik. Hiányzó vagy gyakorlatilag egyenlő prediction esetén
+nem gyárt valószínűséget és nem számol hamis value-t. Az önálló történelmi
+csapaterősség-modell és a történelmi backtest nem része ennek a javítókiadásnak.
+
+HELYI ELLENŐRZÉS
+----------------
+A repó gyökerében:
+
+npm ci
 npm run check
 npm test
 
-KORÁBBI V3 JAVÍTÁSOK
-----------------------
+A tesztek ellenőrzik többek között a prediction-, lejárat-, cache-, piac- és
+elszámolási logikát, valamint azt, hogy a vendég venue-forma kizárólag a csapat
+korábbi idegenbeli mérkőzéseiből készüljön.
 
-V3 JAVÍTÁSOK:
-- Focinál nincs többé mesterséges 33,3–33,3–33,3 valószínűség.
-- Ha nincs valódi prediction/model adat, nincs fair odds és nincs hamis value.
-- NFL és más sportok időpont-formátuma robusztusabban kezelve; hibás dátum nem tünteti el a kártyát.
-- Saját formaadat nélkül a csapatsportok és MMA nem használják vissza a bookmaker oddsot saját modellként.
-- Foci elsőbbséget ad a komolyabb bajnokságoknak, és több oddsos jelöltből keres használható predictiont.
-- Új cache-verzió, így a Netlify nem adja vissza a V2 régi elemzését.
-- F1 szöveg pontosítva: a jelenlegi Tipp Radar modul nem dolgozza fel a többversenyzős F1 fogadási piacokat.
+GITHUB ÉS NETLIFY FRISSÍTÉS
+---------------------------
+Ajánlott munkamenet:
+1) külön Git ág;
+2) módosítás és helyi teszt;
+3) GitHub Pull Request;
+4) sikeres validate CI és Netlify deploy preview;
+5) merge a main ágba;
+6) az éles Netlify health, calibration, performance és today végpontok ellenőrzése.
 
-TIPP RADAR – SPORTELEMZŐ v2
-============================
+A repóban jelenleg nincs kötelező main ruleset, ezért a közvetlen main push
+technikailag lehetséges. Ilyenkor a GitHub CI és a Netlify deploy párhuzamosan
+indulhat; ezért kézi frissítésnél is a fenti PR-alapú folyamat ajánlott.
 
-EZ A VERZIÓ MÁR NEM CSAK FOCI.
-
-Támogatott sportfülek:
-- ⚽ Foci
-- 🏀 Kosárlabda
-- 🏒 Jégkorong
-- 🏈 NFL
-- ⚾ Baseball
-- 🤾 Kézilabda
-- 🏐 Röplabda
-- 🥊 MMA
-- 🏎️ Formula 1
-
-FONTOS: a jelenlegi Netlify + Supabase beállításaidat NEM kell újrakezdeni.
-A már felvett környezeti változók maradnak:
-
-1) API_FOOTBALL_KEY
-   A meglévő API-Sports kulcsod. A program ezt használja az API-Sports külön sport-végpontjaihoz is.
-   Opcionálisan API_SPORTS_KEY néven is megadható; ha mindkettő van, az API_SPORTS_KEY az elsődleges.
-
-2) SUPABASE_URL
-
-3) SUPABASE_SECRET_KEY
-
-SUPABASE
---------
-A v1-ben már lefuttatott supabase/schema.sql továbbra is megfelelő.
-Nem kell új táblát létrehozni ehhez a verzióhoz.
-A sportág az eltárolt rekordban szerveroldali sportcímkével kerül megőrzésre, ezért a régi adatbázis is használható.
-
-MIT JAVÍT A v2?
----------------
-- A foci nem választ ki vakon U19 vagy alacsonyabb osztályú meccseket csak azért, mert a liga nevében szerepel pl. „Bundesliga”. A női élvonalat nem tiltjuk ki automatikusan: ha van megfelelő odds és adat, elemezhető.
-- Először olyan jelölteket keres, amelyekhez ténylegesen van használható odds, és csak utána végzi a drágább részletes elemzést.
-- Sportonként külön elemzőlogika fut.
-- A kezdőoldal „Mai TOP 5” nézetben az összes sportból csak a legerősebb zöld/sárga lehetőségeket rangsorolja.
-- Ha nincs megfelelő value, a program nem erőltet tippet.
-
-SPORTMODELLEK
--------------
-Foci:
-- API-Football prediction
-- sérülések/hiányzók
-- 1X2 odds és value
-- utánpótlás/tartalék és alacsony prioritású bajnokságok kiszűrése; női élvonal maradhat, ha van rendes odds
-
-Kosárlabda:
-- utolsó lezárt meccsek pontátlagai
-- támadó/védekező ponttermésből becsült különbség
-- pihenő/back-to-back hatás
-- moneyline, hendikep/spread, over/under
-
-Jégkorong:
-- gólforma
-- hazai előny
-- győztes és over/under
-
-NFL:
-- pontkülönbség
-- pihenőidő
-- elérhető sérülésadat
-- moneyline, spread, over/under
-
-Baseball:
-- futásátlag és futáskülönbség
-- forma
-- moneyline és total
-
-Kézilabda:
-- gólátlag és gólkülönbség
-- moneyline/hendikep/total
-
-Röplabda:
-- szettforma és győzelmi arány
-- moneyline
-
-MMA:
-- fight winner odds
-- elérhető harcos-mérleg/statistika
-- ha nincs elég egységes harcosadat, automatikus kihagyás
-
-Formula 1:
-- versenyek és pilótarangsor
-- az API-Sports F1 adatforrásban nincs klasszikus bookmaker odds-rendszer, ezért a program nem talál ki mesterséges value tippet; az ilyen eseményt információs/kihagyás státuszban mutatja.
-
-API-KVÓTA
----------
-A program sportonként külön napi cache-t használ a Supabase app_cache táblában.
-A részletes elemzés előtt shortlistet és odds-ellenőrzést végez, így nem próbál több száz eseményhez minden adatot külön lekérni.
-
-FRISSÍTÉS GITHUBON
-------------------
-A kiadási mappa TARTALMÁVAL frissítsd a Tipp-Radar GitHub repó jelenlegi fájljait.
-A repó gyökerében továbbra is ez legyen:
-- netlify/
-- public/
-- supabase/
-- netlify.toml
-- TELEPITES-OLVASSEL.txt
-
-A GitHub commit után a Netlify automatikusan deployolja az új verziót.
-
-
-V4 javítások:
-- Foci: hiányzó prediction mezőből többé nem lesz 33,3 / 33,3 / 33,3.
-- Foci: a USL Championship nem kap top-ligás prioritást csak a Championship szó miatt.
-- NFL/egyéb sport: objektum típusú ország/liganév nem jelenik meg [object Object]-ként.
-- NFL odds: a Home / Away piac szóközös nevét is felismeri.
-- UI: külön jelzi, ha bookmaker adat van, de nincs modellhez kiválasztott piac.
+FELELŐS HASZNÁLAT
+-----------------
+Az alkalmazás 18 éven felülieknek szóló elemzőeszköz. A sportfogadás pénzügyi
+veszteséget és függőséget okozhat. A részletes tájékoztatás:
+- public/felelos-jatek.html
+- public/modell-atlathatosag.html
+- public/adatkezeles.html
