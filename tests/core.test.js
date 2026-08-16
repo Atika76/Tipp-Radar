@@ -80,10 +80,13 @@ test('keves venue-adat csokkenti az adatminoseget es nem kap venue-korrekciot',(
   assert.equal(teamDataQuality(sufficient,odds,'basketball')-teamDataQuality(insufficient,odds,'basketball'),15);
 });
 
-test('a today rate limit explicit Netlify path-hoz tartozik',()=>{
-  const {config}=require('../netlify/functions/today');
+test('a today rate limit explicit Netlify path-hoz tartozik',async()=>{
+  const {config,default:today}=await import('../netlify/functions/today.mjs');
   assert.equal(config.path,'/.netlify/functions/today');
   assert.equal(config.rateLimit.windowLimit,24);
+  const response=await today(new Request('https://example.test/.netlify/functions/today?sport=football'));
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).demo,true);
 });
 
 test('API nelkuli demo mod nem mutat mesterseges tippet',()=>{
