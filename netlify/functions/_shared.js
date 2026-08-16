@@ -24,16 +24,18 @@ function todayBudapest() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
 }
 
-function yesterdayBudapest() {
-  const now = new Date();
+function dateDaysAgoBudapest(days=1,from=new Date()) {
+  const now = new Date(from);
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(now);
   const y = Number(parts.find(x => x.type === 'year').value);
   const m = Number(parts.find(x => x.type === 'month').value);
   const d = Number(parts.find(x => x.type === 'day').value);
   const utc = new Date(Date.UTC(y, m - 1, d));
-  utc.setUTCDate(utc.getUTCDate() - 1);
+  utc.setUTCDate(utc.getUTCDate() - Math.max(0,Number(days)||0));
   return utc.toISOString().slice(0,10);
 }
+
+function yesterdayBudapest() { return dateDaysAgoBudapest(1); }
 
 function apiKey() { return process.env.API_SPORTS_KEY || process.env.API_FOOTBALL_KEY || ''; }
 function apiConfigured() { return Boolean(apiKey()); }
@@ -145,7 +147,8 @@ function withSportTag(sport,text='') { return `[sport:${sport}]${text?` ${text}`
 
 async function savePicks(date,picks) {
   if (!supabaseConfigured()) return;
-  const recommended=(picks||[]).filter(p=>p.rating==='green' || p.rating==='yellow');
+  // Csak olyan piacot mentunk, amelyet kesobb ugyanazzal a rendszerrel le is tudunk zarni.
+  const recommended=(picks||[]).filter(p=>(p.rating==='green' || p.rating==='yellow') && !['mma','formula1'].includes(p.sport) && isFutureKickoff(p.kickoff));
   if (!recommended.length) return;
   const rows=recommended.map(p=>({
     fixture_id:p.fixtureId, pick_date:date, league:p.league||p.eventName||p.sportLabel, country:p.country||p.sportLabel,
@@ -184,7 +187,7 @@ function settleMarket(market,result) {
   if(market==='ML_HOME') return {won:margin>0,push:margin===0};
   if(market==='ML_AWAY') return {won:margin<0,push:margin===0};
   if(market==='ML_DRAW') return {won:margin===0,push:false};
-  let m=String(market).match(/^SPREAD_(HOME|AWAY):(-?\d+(?:\.\d+)?)$/);
+  let m=String(market).match(/^SPREAD_(HOME|AWAY):([+-]?\d+(?:\.\d+)?)$/);
   if(m){ const line=Number(m[2]); const adjusted=m[1]==='HOME'?margin+line:-margin+line; return {won:adjusted>0,push:adjusted===0}; }
   m=String(market).match(/^TOTAL_(OVER|UNDER):(\d+(?:\.\d+)?)$/);
   if(m){ const line=Number(m[2]); if(total===line)return {won:null,push:true}; return {won:m[1]==='OVER'?total>line:total<line,push:false}; }
@@ -200,15 +203,17 @@ async function fetchDayEvents(sport,date) {
   return (await sportApi(sport,'games',{date,timezone:TZ})).response;
 }
 
-async function settleYesterday() {
+async function settleRecentPicks(lookbackDays=7) {
   if (!supabaseConfigured() || !apiConfigured()) return;
-  const date=yesterdayBudapest();
+  const today=todayBudapest();
+  const start=dateDaysAgoBudapest(Math.max(1,Math.min(30,Number(lookbackDays)||7)));
   try {
-    const pending=await supa(`picks?pick_date=eq.${date}&settled=eq.false&select=fixture_id,market,market_odds,api_advice&limit=250`);
+    const pending=await supa(`picks?pick_date=gte.${start}&pick_date=lt.${today}&settled=eq.false&select=fixture_id,pick_date,market,market_odds,api_advice&order=pick_date.asc&limit=1000`);
     if(!Array.isArray(pending)||!pending.length)return;
     const groups={};
-    for(const p of pending){ const sport=parseSportTag(p.api_advice); (groups[sport] ||= []).push(p); }
-    for(const [sport,rows] of Object.entries(groups)) {
+    for(const p of pending){ const sport=parseSportTag(p.api_advice); const key=`${p.pick_date}|${sport}`; (groups[key] ||= []).push(p); }
+    for(const [key,rows] of Object.entries(groups)) {
+      const [date,sport]=key.split('|');
       if(sport==='formula1'||sport==='mma') continue; // MMA/F1 eredményformátumot nem találgatjuk.
       let events=[]; try { events=await fetchDayEvents(sport,date); } catch(e){ console.error('settle fetch',sport,e.message); continue; }
       const byId=new Map(events.map(r=>[Number(rawGameId(r)),r]));
@@ -223,6 +228,26 @@ async function settleYesterday() {
   } catch(e){ console.error('settlement',e.message); }
 }
 
+// Visszafele kompatibilis nev a korabbi Netlify function szamara.
+async function settleYesterday() { return settleRecentPicks(1); }
+
+function isFutureKickoff(value,now=Date.now(),bufferMinutes=5) {
+  const ts=new Date(value).getTime();
+  return Number.isFinite(ts) && ts>Number(now)+Math.max(0,Number(bufferMinutes)||0)*60000;
+}
+
+function filterUpcomingPicks(picks,now=Date.now()) {
+  return (picks||[]).filter(p=>isFutureKickoff(p?.kickoff,now));
+}
+
+function cacheExpiryForPicks(picks,now=Date.now()) {
+  const current=Number(now);
+  const maximum=current+60*60000;
+  const kickoffs=(picks||[]).map(p=>new Date(p?.kickoff).getTime()).filter(t=>Number.isFinite(t)&&t>current);
+  const beforeFirst=kickoffs.length?Math.min(...kickoffs)-5*60000:maximum;
+  return new Date(Math.max(current+5*60000,Math.min(maximum,beforeFirst))).toISOString();
+}
+
 function demoPayload(date,sport='football') {
   const cfg=SPORT_CONFIG[sport]||SPORT_CONFIG.football;
   return {sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,date,generatedAt:new Date().toISOString(),totalEvents:12,eligibleEvents:2,demo:true,persistence:false,picks:[{
@@ -230,4 +255,4 @@ function demoPayload(date,sport='football') {
   }]};
 }
 
-module.exports={json,TZ,SPORT_CONFIG,todayBudapest,yesterdayBudapest,apiConfigured,supabaseConfigured,sportApi,football,supa,getCache,putCache,cachedSportCall,parsePercent,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,sourceIdFromSynthetic,parseSportTag,withSportTag,savePicks,scoreFromGame,rawGameId,isFinished,resultFromRaw,settleMarket,settleYesterday,demoPayload};
+module.exports={json,TZ,SPORT_CONFIG,todayBudapest,yesterdayBudapest,dateDaysAgoBudapest,apiConfigured,supabaseConfigured,sportApi,football,supa,getCache,putCache,cachedSportCall,parsePercent,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,sourceIdFromSynthetic,parseSportTag,withSportTag,savePicks,scoreFromGame,rawGameId,isFinished,resultFromRaw,settleMarket,settleYesterday,settleRecentPicks,isFutureKickoff,filterUpcomingPicks,cacheExpiryForPicks,demoPayload};

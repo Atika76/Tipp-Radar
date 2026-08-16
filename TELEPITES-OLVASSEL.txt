@@ -1,4 +1,23 @@
-TIPP RADAR – SPORTELEMZŐ V3
+TIPP RADAR – SPORTELEMZŐ V5
+
+V5 – VALÓS ADAT, LEJÁRATVÉDELEM ÉS VISSZAMÉRÉS
+=====================================================
+- A rendszer nem ígér garantált eredményt. Sporteredményt maximális bizonyossággal előre jelezni nem lehet.
+- Foci és minden más sport: elkezdődött, lejárt vagy hibás időpontú esemény nem lehet aktív tipp.
+- Az elemzési cache legfeljebb 60 percig, illetve az első esemény kezdése előtt 5 percig érvényes.
+- A függő tippek elszámolása 7 napra visszamenőleg automatikusan pótolható.
+- Zöld csapatsport-tipphez legalább 5-5 lezárt formameccs, legalább 2 bookmaker és szigorúbb value-küszöb kell.
+- MMA és F1 jelenleg információs modul: nem ad eltárolt fogadási tippet, amíg nincs megbízható kalibráció és automatikus elszámolás.
+- A teljesítménykártya külön mutatja a lezárt és a függő zöld tippeket.
+- Beépített Node tesztek védik a prediction-, lejárat-, cache- és elszámolási logikát.
+
+ELLENŐRZÉS
+----------
+npm run check
+npm test
+
+KORÁBBI V3 JAVÍTÁSOK
+----------------------
 
 V3 JAVÍTÁSOK:
 - Focinál nincs többé mesterséges 33,3–33,3–33,3 valószínűség.
@@ -104,7 +123,7 @@ A részletes elemzés előtt shortlistet és odds-ellenőrzést végez, így nem
 
 FRISSÍTÉS GITHUBON
 ------------------
-A ZIP-ben lévő TippRadar-Sportelemzo-v2 mappa TARTALMÁVAL írd felül a Tipp-Radar GitHub repó jelenlegi fájljait.
+A kiadási mappa TARTALMÁVAL frissítsd a Tipp-Radar GitHub repó jelenlegi fájljait.
 A repó gyökerében továbbra is ez legyen:
 - netlify/
 - public/

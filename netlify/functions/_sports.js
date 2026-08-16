@@ -1,6 +1,6 @@
 const {
   SPORT_CONFIG,TZ,sportApi,cachedSportCall,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,
-  scoreFromGame,rawGameId,isFinished
+  scoreFromGame,rawGameId,isFinished,isFutureKickoff
 }=require('./_shared');
 
 const TEAM_SPORTS=new Set(['basketball','hockey','nfl','baseball','handball','volleyball']);
@@ -76,7 +76,7 @@ function candidateScore(sport,event){
 }
 
 function shortlist(sport,events,max=10){
-  return events.map(r=>normalizeTeamEvent(sport,r)).filter(Boolean).filter(e=>notStarted(e.raw)).map(e=>({e,score:candidateScore(sport,e)})).filter(x=>x.score>-100)
+  return events.map(r=>normalizeTeamEvent(sport,r)).filter(Boolean).filter(e=>notStarted(e.raw)&&isFutureKickoff(e.kickoff)).map(e=>({e,score:candidateScore(sport,e)})).filter(x=>x.score>-100)
     .sort((a,b)=>b.score-a.score||new Date(a.e.kickoff||0)-new Date(b.e.kickoff||0)).slice(0,max).map(x=>x.e);
 }
 
@@ -184,7 +184,7 @@ function evaluateTeamMarkets(sport,event,odds,model){
 function opt(market,label,prob,odd){ const p=Number(prob),o=Number(odd); return {market,label,prob:p,odd:o,fair:p>0?100/p:null,ev:Number.isFinite(o)?(p/100*o-1)*100:-999}; }
 
 function buildTeamModel(sport,event,hf,af,odds,injuries={home:0,away:0}){
-  const cfg=MODEL[sport]; const formSufficient=hf.games>=3&&af.games>=3;
+  const cfg=MODEL[sport]; const formSufficient=hf.games>=5&&af.games>=5;
   let predMargin=0,predTotal=null,probs;
   if(formSufficient){
     if(sport==='volleyball'){
@@ -225,7 +225,7 @@ async function analyseTeamEvent(sport,event,odds){
   const model=buildTeamModel(sport,event,hf,af,odds,injuries); const sel=evaluateTeamMarkets(sport,event,odds,model);
   const coverageScore=(model.formSufficient?2:0)+(odds.bookmakerCount?2:0)+(sport==='nfl'&&(injuries.home+injuries.away>0)?1:0);
   const coverage=coverageScore>=4?'Magas':coverageScore>=2?'Közepes':'Alacsony';
-  let rating='red'; if(sel&&model.formSufficient&&coverage!=='Alacsony'&&sel.odd>=1.35&&sel.prob>=54&&sel.ev>=5)rating='green'; else if(sel&&model.formSufficient&&sel.prob>=50&&sel.ev>=1.5)rating='yellow';
+  let rating='red'; if(sel&&model.formSufficient&&coverage==='Magas'&&odds.bookmakerCount>=2&&sel.odd>=1.35&&sel.prob>=55&&sel.ev>=7)rating='green'; else if(sel&&model.formSufficient&&odds.bookmakerCount>=1&&sel.prob>=51&&sel.ev>=2)rating='yellow';
   const reasons=[];
   if(!model.formSufficient)reasons.push('Nincs elég friss, lezárt mérkőzés a saját forma-modellhez, ezért a rendszer nem erőltet tippet.');
   else{
@@ -301,7 +301,7 @@ async function analyseFootball(event,odds){
   const delta=clamp((inj.away-inj.home)*.65,-4,4);probs=normalize3(probs.home+delta,probs.draw,probs.away-delta);
   const opts=[]; if(odds.money.home)opts.push(opt('ML_HOME',`${event.home.name} (1)`,probs.home,odds.money.home));if(odds.money.draw)opts.push(opt('ML_DRAW','Döntetlen (X)',probs.draw,odds.money.draw));if(odds.money.away)opts.push(opt('ML_AWAY',`${event.away.name} (2)`,probs.away,odds.money.away));
   const sel=opts.sort((a,b)=>b.ev-a.ev)[0]||null;const coverage=odds.bookmakerCount?'Magas':'Közepes';
-  let rating='red';if(sel&&sel.prob>=52&&sel.ev>=5&&sel.odd>=1.30)rating='green';else if(sel&&sel.prob>=45&&sel.ev>=1.5)rating='yellow';
+  let rating='red';if(sel&&odds.bookmakerCount>=2&&sel.prob>=55&&sel.ev>=7&&sel.odd>=1.30)rating='green';else if(sel&&odds.bookmakerCount>=1&&sel.prob>=48&&sel.ev>=2)rating='yellow';
   const reasons=[];if(sel)reasons.push(`Becsült esély ${sel.prob.toFixed(1)}%, fair odds ${sel.fair.toFixed(2)}, piaci medián ${sel.odd.toFixed(2)}.`);else reasons.push('Nincs használható 1X2 odds.');
   if(pred?.predictions?.winner?.name)reasons.push(`Az API-Football prediction esélyese: ${pred.predictions.winner.name}.`);if(inj.home+inj.away)reasons.push(`Elérhető hiányzók/sérülések: hazai ${inj.home}, vendég ${inj.away}.`);if(sel&&sel.ev<1)reasons.push('A piac és a modell között nincs elég különbség, ezért kihagyás.');
   return {sport:'football',sportLabel:'Foci',sportEmoji:'⚽',fixtureId:syntheticId('football',event.sourceId),sourceId:event.sourceId,league:event.league,country:event.country,home:event.home.name,away:event.away.name,kickoff:event.kickoff,recommendation:rating==='red'?'Kihagyás':sel.label,market:sel?.market||'NONE',marketLabel:sel?.label||'1X2',probability:sel?Number(sel.prob.toFixed(2)):Math.max(probs.home,probs.draw,probs.away),fairOdds:sel?.fair?Number(sel.fair.toFixed(2)):null,marketOdds:sel?.odd?Number(sel.odd.toFixed(2)):null,edge:sel?Number(sel.ev.toFixed(2)):null,rating,probabilities:{home:Number(probs.home.toFixed(1)),draw:Number(probs.draw.toFixed(1)),away:Number(probs.away.toFixed(1))},injuries:inj,modelValid:true,apiAdvice:pred?.predictions?.advice||null,coverage,modelName:'Foci modell • API prediction + sérülések + 1X2 value',reasons,bookmakerCount:odds.bookmakerCount};
@@ -309,7 +309,7 @@ async function analyseFootball(event,odds){
 
 async function analyseFootballDay(date){
   const fixtures=(await sportApi('football','fixtures',{date,timezone:TZ})).response;
-  const ranked=fixtures.map(normalizeFootball).filter(e=>e.sourceId&&e.home?.id&&e.away?.id).map(e=>({e,score:footballScore(e)})).filter(x=>x.score>-100).sort((a,b)=>b.score-a.score||new Date(a.e.kickoff||0)-new Date(b.e.kickoff||0));
+  const ranked=fixtures.map(normalizeFootball).filter(e=>e.sourceId&&e.home?.id&&e.away?.id&&notStarted(e.raw)&&isFutureKickoff(e.kickoff)).map(e=>({e,score:footballScore(e)})).filter(x=>x.score>-100).sort((a,b)=>b.score-a.score||new Date(a.e.kickoff||0)-new Date(b.e.kickoff||0));
   const major=ranked.filter(x=>x.score>=90);const pool=(major.length?major:ranked).slice(0,16).map(x=>x.e);
   const withOdds=[]; for(let i=0;i<pool.length;i+=4){const group=pool.slice(i,i+4);const odds=await Promise.all(group.map(e=>oddsForEvent('football',e)));group.forEach((e,j)=>{if(hasUsefulOdds(odds[j]))withOdds.push({e,odds:odds[j]});});if(withOdds.length>=8)break;}
   const analysed=[];for(let i=0;i<Math.min(withOdds.length,8);i+=2){analysed.push(...await Promise.all(withOdds.slice(i,i+2).map(x=>analyseFootball(x.e,x.odds))));if(analysed.filter(x=>x.modelValid).length>=4)break;}
@@ -331,12 +331,12 @@ function recursiveFind(obj,patterns){ if(!obj||typeof obj!=='object')return null
 async function fighterRecord(id){ try{const r=await cachedSportCall('mma',`fighterstats-${id}`,'fights/statistics/fighters',{id},1440);const root=Array.isArray(r)?r[0]:r;const wins=recursiveFind(root,[/^wins?$/i,/win_total/i]),losses=recursiveFind(root,[/^loss(es)?$/i,/loss_total/i]),draws=recursiveFind(root,[/^draws?$/i]);return{wins,losses,draws,raw:root};}catch{return{wins:null,losses:null,draws:null};} }
 async function analyseMmaDay(date){
   let fights=[];try{fights=(await sportApi('mma','fights',{date,timezone:TZ})).response;}catch(e){return{totalEvents:0,eligibleEvents:0,picks:[],note:e.message};}
-  const candidates=fights.map(normalizeFight).filter(Boolean).slice(0,8),withOdds=[];for(const e of candidates){const o=await oddsForEvent('mma',e);if(hasUsefulOdds(o))withOdds.push({e,odds:o});if(withOdds.length>=3)break;}
+  const candidates=fights.map(normalizeFight).filter(e=>e&&notStarted(e.raw)&&isFutureKickoff(e.kickoff)).slice(0,8),withOdds=[];for(const e of candidates){const o=await oddsForEvent('mma',e);if(hasUsefulOdds(o))withOdds.push({e,odds:o});if(withOdds.length>=3)break;}
   const picks=[];for(const {e,odds} of withOdds.slice(0,3)){
     const [ra,rb]=await Promise.all([fighterRecord(e.home.id),fighterRecord(e.away.id)]);const gamesA=(ra.wins||0)+(ra.losses||0)+(ra.draws||0),gamesB=(rb.wins||0)+(rb.losses||0)+(rb.draws||0);let probs={};let statsOk=gamesA>=3&&gamesB>=3;
     if(statsOk){const wrA=(ra.wins+.5*(ra.draws||0))/gamesA,wrB=(rb.wins+.5*(rb.draws||0))/gamesB;const rec=normalize2(Math.exp((wrA-.5)*2.2),Math.exp((wrB-.5)*2.2));probs={home:rec.home,away:rec.away};}
-    const opts=[];if(statsOk&&odds.money.home)opts.push(opt('ML_HOME',`${e.home.name} – győztes`,probs.home,odds.money.home));if(statsOk&&odds.money.away)opts.push(opt('ML_AWAY',`${e.away.name} – győztes`,probs.away,odds.money.away));const sel=opts.sort((a,b)=>b.ev-a.ev)[0]||null;let rating='red';if(sel&&statsOk&&sel.prob>=55&&sel.ev>=5)rating='green';else if(sel&&statsOk&&sel.prob>=51&&sel.ev>=2)rating='yellow';const reasons=[];if(statsOk)reasons.push(`Elérhető mérleg: ${e.home.name} ${ra.wins}-${ra.losses}, ${e.away.name} ${rb.wins}-${rb.losses}.`);else reasons.push('A harcosokhoz nem érkezett elég egységes történeti statisztika, ezért a rendszer nem gyárt mesterséges előnyt.');if(sel)reasons.push(`Becsült esély ${sel.prob.toFixed(1)}%, piaci odds ${sel.odd.toFixed(2)}, value ${sel.ev>=0?'+':''}${sel.ev.toFixed(1)}%.`);
-    picks.push({sport:'mma',sportLabel:'MMA',sportEmoji:'🥊',fixtureId:syntheticId('mma',e.sourceId),sourceId:e.sourceId,league:e.league,country:e.country,home:e.home.name,away:e.away.name,kickoff:e.kickoff,recommendation:rating==='red'?'Kihagyás':sel.label,market:sel?.market||'NONE',marketLabel:sel?.label||'Fight winner',probability:sel?Number(sel.prob.toFixed(2)):null,fairOdds:sel?.fair?Number(sel.fair.toFixed(2)):null,marketOdds:sel?.odd?Number(sel.odd.toFixed(2)):null,edge:sel?Number(sel.ev.toFixed(2)):null,rating,probabilities:statsOk?{home:Number(probs.home.toFixed(1)),away:Number(probs.away.toFixed(1))}:{},injuries:{home:0,away:0},modelValid:statsOk,apiAdvice:null,coverage:statsOk&&odds.bookmakerCount?'Magas':odds.bookmakerCount?'Közepes':'Alacsony',modelName:'MMA modell • fighter mérleg + piaci odds',reasons,bookmakerCount:odds.bookmakerCount});
+    const opts=[];if(statsOk&&odds.money.home)opts.push(opt('ML_HOME',`${e.home.name} – győztes`,probs.home,odds.money.home));if(statsOk&&odds.money.away)opts.push(opt('ML_AWAY',`${e.away.name} – győztes`,probs.away,odds.money.away));const sel=opts.sort((a,b)=>b.ev-a.ev)[0]||null;const rating='red';const reasons=[];if(statsOk)reasons.push(`Elérhető mérleg: ${e.home.name} ${ra.wins}-${ra.losses}, ${e.away.name} ${rb.wins}-${rb.losses}.`);else reasons.push('A harcosokhoz nem érkezett elég egységes történeti statisztika, ezért a rendszer nem gyárt mesterséges előnyt.');if(sel)reasons.push(`Nyers becslés ${sel.prob.toFixed(1)}%, piaci odds ${sel.odd.toFixed(2)}. Ez nem publikált tipp, mert az MMA-modell még nem kalibrált és automatikusan nem számolható el.`);
+    picks.push({sport:'mma',sportLabel:'MMA',sportEmoji:'🥊',fixtureId:syntheticId('mma',e.sourceId),sourceId:e.sourceId,league:e.league,country:e.country,home:e.home.name,away:e.away.name,kickoff:e.kickoff,recommendation:'Kihagyás – a modell még nincs visszamérve',market:'NONE',marketLabel:'Fight winner – csak információ',probability:null,fairOdds:null,marketOdds:sel?.odd?Number(sel.odd.toFixed(2)):null,edge:null,rating,probabilities:statsOk?{home:Number(probs.home.toFixed(1)),away:Number(probs.away.toFixed(1))}:{},injuries:{home:0,away:0},modelValid:false,apiAdvice:null,coverage:statsOk&&odds.bookmakerCount?'Közepes':odds.bookmakerCount?'Közepes':'Alacsony',modelName:'MMA információs modell • nem publikál tippet',reasons,bookmakerCount:odds.bookmakerCount});
   }
   return{totalEvents:fights.length,eligibleEvents:withOdds.length,picks};
 }
@@ -363,4 +363,4 @@ async function analyseSportDay(sport,date){
   throw new Error(`Nem támogatott sport: ${sport}`);
 }
 
-module.exports={analyseSportDay};
+module.exports={analyseSportDay,__test:{predictionProb,notStarted,footballScore}};
