@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#101827" />
+  <meta name="description" content="TippRadar – adatvezérelt focimeccs-elemző és tippkövető webalkalmazás." />
+  <title>TippRadar – Focimeccs elemző</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  
+  <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="favicon-16.png" sizes="16x16" type="image/png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">ADATVEZÉRELT FOCI ELEMZÉS</p>
+      <h1>TippRadar</h1>
+      <p class="subtitle">Ne azt keresd, ki a favorit. Azt keresd, hol van érték az oddsban.</p>
+    </div>
+    <div class="status-wrap">
+      <span id="modeBadge" class="badge badge-neutral">Ellenőrzés…</span>
+      <button id="refreshBtn" class="btn btn-primary" type="button">Mai elemzés frissítése</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero-grid">
+      <article class="card hero-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">MAI ÖSSZKÉP</p>
+            <h2 id="todayTitle">Mai meccsek</h2>
+          </div>
+          <span id="generatedAt" class="muted"></span>
+        </div>
+        <div id="summaryStats" class="stats-grid"></div>
+        <div id="systemMessage" class="notice hidden"></div>
+      </article>
+
+      <article class="card proof-card">
+        <p class="eyebrow">BIZONYÍTÉK</p>
+        <h2>Hosszú távú teljesítmény</h2>
+        <div id="performance" class="performance-grid">
+          <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+        <p class="muted small">A rendszer csak a meccs előtt eltárolt tippeket számolja. Így utólag nem lehet „szépíteni” az eredményeket.</p>
+      </article>
+    </section>
+
+    <section class="filters card">
+      <div class="filter-row">
+        <label>
+          <span>Szűrés</span>
+          <input id="searchInput" type="search" placeholder="Csapat vagy bajnokság…" />
+        </label>
+        <label>
+          <span>Értékelés</span>
+          <select id="ratingFilter">
+            <option value="all">Mind</option>
+            <option value="green">🟢 Megfontolható</option>
+            <option value="yellow">🟡 Óvatos</option>
+            <option value="red">🔴 Kihagyás</option>
+          </select>
+        </label>
+        <label>
+          <span>Rendezés</span>
+          <select id="sortSelect">
+            <option value="edge">Legnagyobb érték</option>
+            <option value="probability">Legnagyobb esély</option>
+            <option value="kickoff">Kezdési idő</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head section-space">
+        <div>
+          <p class="eyebrow">AJÁNLÁSOK</p>
+          <h2>Mai elemzett meccsek</h2>
+        </div>
+        <span id="resultCount" class="muted"></span>
+      </div>
+      <div id="picksGrid" class="picks-grid">
+        <article class="card loading-card"><div class="skeleton tall"></div></article>
+        <article class="card loading-card"><div class="skeleton tall"></div></article>
+      </div>
+    </section>
+
+    <section class="card info-card">
+      <div>
+        <p class="eyebrow">MIT SZÁMOL?</p>
+        <h2>Nem „biztos tippeket”, hanem valószínűséget és értéket</h2>
+      </div>
+      <div class="info-grid">
+        <div><strong>Forma és erőviszony</strong><span>API prediction + utóbbi teljesítmény</span></div>
+        <div><strong>Hazai / idegen</strong><span>A csapatok helyzetének külön kezelése</span></div>
+        <div><strong>Sérülések</strong><span>Elérhető hiányzók száma és hatása</span></div>
+        <div><strong>Piaci odds</strong><span>Több bookmaker 1X2 oddsainak mediánja</span></div>
+        <div><strong>Fair odds</strong><span>1 ÷ becsült valószínűség</span></div>
+        <div><strong>Value</strong><span>A becslés és a piac közti különbség</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>TippRadar • elemzőeszköz, nem garantált fogadási eredmény. A sportfogadás kockázattal jár.</p>
+  </footer>
+
+  <template id="pickTemplate">
+    <article class="card pick-card">
+      <div class="pick-top">
+        <div>
+          <p class="league"></p>
+          <h3 class="fixture"></h3>
+          <p class="kickoff muted"></p>
+        </div>
+        <span class="rating-badge"></span>
+      </div>
+      <div class="recommendation-box">
+        <span class="market-label">AJÁNLÁS</span>
+        <strong class="recommendation"></strong>
+        <span class="market-odds"></span>
+      </div>
+      <div class="metric-grid">
+        <div><span>Becsült esély</span><strong class="probability"></strong></div>
+        <div><span>Fair odds</span><strong class="fair-odds"></strong></div>
+        <div><span>Piaci odds</span><strong class="odds"></strong></div>
+        <div><span>Érték</span><strong class="edge"></strong></div>
+      </div>
+      <div class="probability-bar"><span></span></div>
+      <div class="triple-prob"></div>
+      <details>
+        <summary>Miért ezt mondja?</summary>
+        <ul class="reasons"></ul>
+        <div class="detail-grid">
+          <div><span>Sérültek / hiányzók</span><strong class="injuries"></strong></div>
+          <div><span>API tanács</span><strong class="api-advice"></strong></div>
+          <div><span>Adatminőség</span><strong class="coverage"></strong></div>
+        </div>
+      </details>
+    </article>
+  </template>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
