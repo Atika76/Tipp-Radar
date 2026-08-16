@@ -3,7 +3,7 @@ TIPP RADAR – SPORTELEMZŐ V6
 
 VERZIÓ ÉS CÉL
 --------------
-Modellverzió: v6.0.0
+Modellverzió: v6.0.1
 
 A Tipp Radar valós sport- és oddsadatokból valószínűségi becslést készít.
 Nem ígér garantált vagy „TUTI” eredményt. Ha az adat hiányos, gyenge,

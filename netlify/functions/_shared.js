@@ -1,5 +1,5 @@
 const TZ = 'Europe/Budapest';
-const MODEL_VERSION = 'v6.0.0';
+const MODEL_VERSION = 'v6.0.1';
 const inFlight = new Map();
 
 const SPORT_CONFIG = {
