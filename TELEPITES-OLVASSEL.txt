@@ -113,3 +113,11 @@ A repó gyökerében továbbra is ez legyen:
 - TELEPITES-OLVASSEL.txt
 
 A GitHub commit után a Netlify automatikusan deployolja az új verziót.
+
+
+V4 javítások:
+- Foci: hiányzó prediction mezőből többé nem lesz 33,3 / 33,3 / 33,3.
+- Foci: a USL Championship nem kap top-ligás prioritást csak a Championship szó miatt.
+- NFL/egyéb sport: objektum típusú ország/liganév nem jelenik meg [object Object]-ként.
+- NFL odds: a Home / Away piac szóközös nevét is felismeri.
+- UI: külön jelzi, ha bookmaker adat van, de nincs modellhez kiválasztott piac.

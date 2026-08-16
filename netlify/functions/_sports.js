@@ -15,7 +15,7 @@ const MODEL={
 };
 
 const MAJOR_PATTERNS={
-  football:[/premier league$/i,/championship$/i,/la liga$/i,/serie a$/i,/bundesliga$/i,/ligue 1$/i,/eredivisie$/i,/primeira liga$/i,/super lig$/i,/premiership$/i,/nb i$/i,/champions league/i,/europa league/i,/conference league/i,/copa libertadores/i,/mls/i,/women'?s super league/i,/nwsl/i,/liga f$/i,/frauen-bundesliga/i],
+  football:[/^premier league$/i,/^championship$/i,/^la liga$/i,/^serie a$/i,/^bundesliga$/i,/^ligue 1$/i,/^eredivisie$/i,/^primeira liga$/i,/^super lig$/i,/^premiership$/i,/^nb i$/i,/champions league/i,/europa league/i,/conference league/i,/copa libertadores/i,/^major league soccer$/i,/^mls$/i,/women'?s super league/i,/nwsl/i,/liga f$/i,/frauen-bundesliga/i],
   basketball:[/nba$/i,/wnba$/i,/euroleague/i,/eurocup/i,/acb/i,/lega a/i,/bundesliga/i,/bbl/i,/pro a/i,/betclic elite/i,/basket league/i,/nbl/i,/bsl/i],
   hockey:[/nhl$/i,/pwhl$/i,/khl$/i,/shl$/i,/liiga$/i,/del$/i,/extraliga/i,/national league/i,/ice hockey league/i],
   nfl:[/^nfl$/i],
@@ -26,9 +26,21 @@ const MAJOR_PATTERNS={
 
 const REJECT_COMMON=/\b(u[- ]?1[5-9]|u[- ]?2[0-3]|under[- ]?1[5-9]|under[- ]?2[0-3]|youth|junior|juniors|academy|reserve|reserves|development|amateur|regional)\b/i;
 
-function eventLeague(raw){ return raw?.league?.name||raw?.competition?.name||raw?.category?.name||raw?.tournament?.name||''; }
-function eventCountry(raw){ return raw?.country?.name||raw?.country||raw?.league?.country||raw?.competition?.location?.country||''; }
-function eventSeason(raw){ return raw?.league?.season||raw?.season||raw?.competition?.season||new Date().getFullYear(); }
+function textValue(v){
+  if(v==null)return '';
+  if(typeof v==='string'||typeof v==='number')return String(v);
+  if(typeof v==='object')return textValue(v.name??v.title??v.label??v.code??v.country??v.value??'');
+  return '';
+}
+function seasonValue(v){
+  if(v==null)return new Date().getFullYear();
+  if(typeof v==='number'||typeof v==='string'){const n=Number(String(v).slice(0,4));return Number.isFinite(n)&&n>1900?n:v;}
+  if(typeof v==='object')return seasonValue(v.year??v.season??v.name??v.id);
+  return new Date().getFullYear();
+}
+function eventLeague(raw){ return textValue(raw?.league?.name??raw?.league??raw?.competition?.name??raw?.category?.name??raw?.tournament?.name); }
+function eventCountry(raw){ return textValue(raw?.country?.name??raw?.country??raw?.league?.country?.name??raw?.league?.country??raw?.competition?.location?.country); }
+function eventSeason(raw){ return seasonValue(raw?.league?.season??raw?.season??raw?.competition?.season); }
 function eventDate(raw){
   const v=raw?.fixture?.date??raw?.game?.date??raw?.race?.date??raw?.fight?.date??raw?.date??null;
   if(v==null)return null;
@@ -82,7 +94,7 @@ function collectOdds(oddsPayload,homeName,awayName){
           const odd=Number(val.odd); if(!Number.isFinite(odd)||odd<1.01)continue;
           const label=String(val.value??val.name??'').trim(); const low=label.toLowerCase();
           const handicap=Number(val.handicap??val.handicap_value??val.points??extractNumber(label));
-          if(/match winner|winner|home\/away|moneyline|1x2|3way|three way|result$/i.test(bn)){
+          if(/match winner|winner|home\s*\/\s*away|money\s*line|1x2|3\s*way|three\s*way|result$/i.test(bn)){
             if(isHomeLabel(low,homeName))market.money.home.push(odd);
             else if(isAwayLabel(low,awayName))market.money.away.push(odd);
             else if(/^(draw|x|tie)$/i.test(low))market.money.draw.push(odd);
@@ -239,16 +251,51 @@ function normalizeFootball(raw){
   return {sport:'football',sourceId:raw?.fixture?.id,raw,league:raw?.league?.name||'',country:raw?.league?.country||'',season:raw?.league?.season,kickoff:raw?.fixture?.date,
     home:{id:raw?.teams?.home?.id,name:raw?.teams?.home?.name},away:{id:raw?.teams?.away?.id,name:raw?.teams?.away?.name}};
 }
-function footballScore(e){ const txt=`${e.league} ${e.country}`; if(REJECT_COMMON.test(txt))return-999;if(/\b(ii|iii|iv)\b|nb iii|liga 3|regional|county|reserve/i.test(txt))return-200;let s=0;for(const re of MAJOR_PATTERNS.football)if(re.test(e.league))s+=100;if(/england|spain|italy|germany|france|netherlands|portugal|hungary|turkey|usa/i.test(e.country))s+=15;return s; }
-function predictionProb(pred){ const p=pred?.predictions?.percent||{}; const h=Number(String(p.home||'').replace('%','')),d=Number(String(p.draw||'').replace('%','')),a=Number(String(p.away||'').replace('%','')); return [h,d,a].every(Number.isFinite)?normalize3(h,d,a):null; }
+function footballScore(e){
+  const league=String(e.league||'').trim(), country=String(e.country||'').trim();
+  const txt=`${league} ${country}`;
+  if(REJECT_COMMON.test(txt))return-999;
+  if(/\b(ii|iii|iv)\b|nb iii|liga 3|regional|county|reserve|mls next pro/i.test(txt))return-200;
+  const l=league.toLowerCase(), c=country.toLowerCase();
+  let score=0;
+  if(/champions league|europa league|conference league|copa libertadores/i.test(league))score+=180;
+  const topPairs=[
+    ['england',['premier league','championship']],['spain',['la liga']],['italy',['serie a']],['germany',['bundesliga']],
+    ['france',['ligue 1']],['netherlands',['eredivisie']],['portugal',['primeira liga']],['hungary',['nb i']],['turkey',['super lig']],
+    ['usa',['major league soccer','mls','nwsl']]
+  ];
+  for(const [cc,names] of topPairs)if(c.includes(cc)&&names.includes(l))score+=150;
+  if(/^women'?s super league$/i.test(league)&&c.includes('england'))score+=130;
+  if(/^liga f$/i.test(league)&&c.includes('spain'))score+=130;
+  if(/frauen-bundesliga/i.test(league)&&c.includes('germany'))score+=130;
+  if(/usl championship/i.test(league))score+=20;
+  if(/england|spain|italy|germany|france|netherlands|portugal|hungary|turkey|usa/i.test(country))score+=15;
+  return score;
+}
+function predictionProb(pred){
+  const p=pred?.predictions?.percent||{};
+  const raw=[p.home,p.draw,p.away];
+  if(raw.some(v=>v==null||String(v).trim()===''))return null;
+  const nums=raw.map(v=>Number(String(v).replace('%','').trim()));
+  if(nums.some(v=>!Number.isFinite(v)||v<0))return null;
+  const sum=nums.reduce((a,b)=>a+b,0);
+  if(sum<1)return null;
+  const probs=normalize3(nums[0],nums[1],nums[2]);
+  const spread=Math.max(probs.home,probs.draw,probs.away)-Math.min(probs.home,probs.draw,probs.away);
+  return {probs,lowSignal:spread<4};
+}
 function injuryCount(rows,homeId,awayId){let home=0,away=0;for(const x of rows||[]){if(Number(x?.team?.id)===Number(homeId))home++;if(Number(x?.team?.id)===Number(awayId))away++;}return{home,away};}
 async function analyseFootball(event,odds){
   const [pr,ir]=await Promise.allSettled([sportApi('football','predictions',{fixture:event.sourceId}),sportApi('football','injuries',{fixture:event.sourceId})]);
   const pred=pr.status==='fulfilled'?pr.value.response[0]:null;const inj=injuryCount(ir.status==='fulfilled'?ir.value.response:[],event.home.id,event.away.id);
-  const baseProbs=predictionProb(pred);
+  const prediction=predictionProb(pred);
+  const baseProbs=prediction?.probs||null;
   // Fontos: ha nincs valódi prediction százalék, nem használjuk vissza a bookmaker oddsát "saját modellként".
   if(!baseProbs){
     return {sport:'football',sportLabel:'Foci',sportEmoji:'⚽',fixtureId:syntheticId('football',event.sourceId),sourceId:event.sourceId,league:event.league,country:event.country,home:event.home.name,away:event.away.name,kickoff:event.kickoff,recommendation:'Kihagyás – nincs megbízható modelladat',market:'NONE',marketLabel:'1X2',probability:null,fairOdds:null,marketOdds:null,edge:null,rating:'red',probabilities:{},injuries:inj,modelValid:false,apiAdvice:pred?.predictions?.advice||null,coverage:odds.bookmakerCount?'Közepes':'Alacsony',modelName:'Foci modell • API prediction + sérülések + 1X2 value',reasons:['Ehhez a mérkőzéshez az API nem adott használható prediction százalékokat, ezért a rendszer nem gyárt 33,3–33,3–33,3 becslést és nem számol hamis value-t.',odds.bookmakerCount?`Piaci odds elérhető ${odds.bookmakerCount} bookmakerből, de önálló modell nélkül ez nem elég tipphez.`:'Nincs használható 1X2 odds sem.'],bookmakerCount:odds.bookmakerCount};
+  }
+  if(prediction?.lowSignal){
+    return {sport:'football',sportLabel:'Foci',sportEmoji:'⚽',fixtureId:syntheticId('football',event.sourceId),sourceId:event.sourceId,league:event.league,country:event.country,home:event.home.name,away:event.away.name,kickoff:event.kickoff,recommendation:'Kihagyás – túl bizonytalan prediction',market:'NONE',marketLabel:'1X2',probability:null,fairOdds:null,marketOdds:null,edge:null,rating:'red',probabilities:{home:Number(baseProbs.home.toFixed(1)),draw:Number(baseProbs.draw.toFixed(1)),away:Number(baseProbs.away.toFixed(1))},injuries:inj,modelValid:false,apiAdvice:pred?.predictions?.advice||null,coverage:odds.bookmakerCount?'Közepes':'Alacsony',modelName:'Foci modell • API prediction + sérülések + 1X2 value',reasons:['Az API százalékai gyakorlatilag egyenlőek; ebből a rendszer nem számol value tippet, mert nincs érdemi modell-előny.',odds.bookmakerCount?`Piaci odds elérhető ${odds.bookmakerCount} bookmakerből, de a prediction jel túl gyenge.`:'Nincs használható 1X2 odds sem.'],bookmakerCount:odds.bookmakerCount};
   }
   let probs=baseProbs;
   const delta=clamp((inj.away-inj.home)*.65,-4,4);probs=normalize3(probs.home+delta,probs.draw,probs.away-delta);

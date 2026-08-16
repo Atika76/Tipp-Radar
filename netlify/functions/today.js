@@ -8,7 +8,7 @@ exports.handler=async(event)=>{
   const sport=String(event?.queryStringParameters?.sport||'football').toLowerCase();
   if(!SPORT_CONFIG[sport]) return json(400,{error:'Ismeretlen sportág.',supported:Object.keys(SPORT_CONFIG)});
   if(!apiConfigured()) return json(200,demoPayload(date,sport));
-  const cacheKey=`analysis:${date}:multisport-v3:${sport}`;
+  const cacheKey=`analysis:${date}:multisport-v4:${sport}`;
   if(supabaseConfigured()){
     const cached=await getCache(cacheKey);
     if(cached)return json(200,{...cached,persistence:true,cached:true});
