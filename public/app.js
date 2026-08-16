@@ -5,7 +5,7 @@ const state={bySport:{},errors:{},loading:new Set(),active:'all',filtered:[],las
 const el=id=>document.getElementById(id);
 const fmtPct=n=>Number.isFinite(Number(n))?`${Number(n).toFixed(1)}%`:'—';
 const fmtOdds=n=>Number.isFinite(Number(n))&&Number(n)>0?Number(n).toFixed(2):'—';
-const fmtKickoff=iso=>{if(!iso)return'Időpont nem ismert';const d=new Date(iso);return new Intl.DateTimeFormat('hu-HU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Budapest'}).format(d)};
+const fmtKickoff=iso=>{if(!iso)return'Időpont nem ismert';const d=new Date(iso);if(Number.isNaN(d.getTime()))return'Időpont nem ismert';try{return new Intl.DateTimeFormat('hu-HU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Budapest'}).format(d)}catch{return'Időpont nem ismert'}};
 async function api(path){const r=await fetch(path,{headers:{Accept:'application/json'}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.message||`HTTP ${r.status}`);return d;}
 
 async function loadHealth(){try{const h=await api('/.netlify/functions/health');const b=el('modeBadge');if(h.apiConfigured&&h.supabaseConfigured){b.textContent='● ÉLES • MULTISPORT + SUPABASE';b.className='badge badge-green';}else if(h.apiConfigured){b.textContent='● ÉLES • SUPABASE NÉLKÜL';b.className='badge badge-yellow';}else{b.textContent='● DEMÓ • API KULCS KELL';b.className='badge badge-red';}}catch{el('modeBadge').textContent='● HIBA A BEÁLLÍTÁSBAN';el('modeBadge').className='badge badge-red';}}

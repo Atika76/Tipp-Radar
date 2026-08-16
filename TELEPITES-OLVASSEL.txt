@@ -1,3 +1,14 @@
+TIPP RADAR – SPORTELEMZŐ V3
+
+V3 JAVÍTÁSOK:
+- Focinál nincs többé mesterséges 33,3–33,3–33,3 valószínűség.
+- Ha nincs valódi prediction/model adat, nincs fair odds és nincs hamis value.
+- NFL és más sportok időpont-formátuma robusztusabban kezelve; hibás dátum nem tünteti el a kártyát.
+- Saját formaadat nélkül a csapatsportok és MMA nem használják vissza a bookmaker oddsot saját modellként.
+- Foci elsőbbséget ad a komolyabb bajnokságoknak, és több oddsos jelöltből keres használható predictiont.
+- Új cache-verzió, így a Netlify nem adja vissza a V2 régi elemzését.
+- F1 szöveg pontosítva: a jelenlegi Tipp Radar modul nem dolgozza fel a többversenyzős F1 fogadási piacokat.
+
 TIPP RADAR – SPORTELEMZŐ v2
 ============================
 
