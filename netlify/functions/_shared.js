@@ -1,5 +1,5 @@
 const TZ = 'Europe/Budapest';
-const MODEL_VERSION = 'v6.0.1';
+const MODEL_VERSION = 'v6.0.2';
 const inFlight = new Map();
 
 const SPORT_CONFIG = {
@@ -311,9 +311,13 @@ function cacheExpiryForPicks(picks,now=Date.now()) {
   return new Date(Math.max(current+5*60000,Math.min(maximum,beforeFirst))).toISOString();
 }
 
+function dailyCacheExpiry(now=Date.now()) {
+  return new Date(Number(now)+26*60*60000).toISOString();
+}
+
 function demoPayload(date,sport='football') {
   const cfg=SPORT_CONFIG[sport]||SPORT_CONFIG.football;
   return {sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,date,generatedAt:new Date().toISOString(),totalEvents:0,eligibleEvents:0,demo:true,persistence:false,note:'Az API-kulcs nincs beállítva ebben a környezetben. A rendszer nem jelenít meg minta tippet vagy mesterséges valószínűséget.',picks:[]};
 }
 
-module.exports={json,TZ,MODEL_VERSION,SPORT_CONFIG,todayBudapest,yesterdayBudapest,dateDaysAgoBudapest,apiConfigured,supabaseConfigured,sportApi,football,supa,supaRpc,getCache,putCache,cachedSportCall,singleFlight,claimAnalysisLock,releaseAnalysisLock,parsePercent,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,sourceIdFromSynthetic,parseSportTag,withSportTag,savePicks,recordModelRun,scoreFromGame,rawGameId,isFinished,resultFromRaw,regulationResultFromRaw,settleMarket,settleYesterday,settleRecentPicks,isFutureKickoff,filterUpcomingPicks,cacheExpiryForPicks,demoPayload};
+module.exports={json,TZ,MODEL_VERSION,SPORT_CONFIG,todayBudapest,yesterdayBudapest,dateDaysAgoBudapest,apiConfigured,supabaseConfigured,sportApi,football,supa,supaRpc,getCache,putCache,cachedSportCall,singleFlight,claimAnalysisLock,releaseAnalysisLock,parsePercent,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,sourceIdFromSynthetic,parseSportTag,withSportTag,savePicks,recordModelRun,scoreFromGame,rawGameId,isFinished,resultFromRaw,regulationResultFromRaw,settleMarket,settleYesterday,settleRecentPicks,isFutureKickoff,filterUpcomingPicks,cacheExpiryForPicks,dailyCacheExpiry,demoPayload};
