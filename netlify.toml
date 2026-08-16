@@ -5,6 +5,9 @@
 [functions]
   node_bundler = "esbuild"
 
+[functions."settle-scheduled"]
+  schedule = "15 2 * * *"
+
 [[headers]]
   for = "/*"
   [headers.values]

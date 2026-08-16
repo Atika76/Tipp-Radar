@@ -1,4 +1,4 @@
--- Tipp Radar Sportelemző – Supabase adatbázis (v1/v2 kompatibilis)
+-- Tipp Radar Sportelemző – Supabase adatbázis (V6)
 -- Ezt a teljes fájlt másold be a Supabase SQL Editorba, majd Run/Futtatás.
 
 create table if not exists public.app_cache (
@@ -34,6 +34,14 @@ create table if not exists public.picks (
   home_score integer,
   away_score integer,
   unit_profit numeric(10,4),
+  model_version text not null default 'legacy',
+  model_family text,
+  data_quality numeric(5,2),
+  market_period text not null default 'full',
+  evidence jsonb not null default '{}'::jsonb,
+  settled_at timestamptz,
+  settlement_source text,
+  brier_score numeric(10,8),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (fixture_id, pick_date)
@@ -42,6 +50,11 @@ create table if not exists public.picks (
 create index if not exists picks_pick_date_idx on public.picks (pick_date desc);
 create index if not exists picks_rating_idx on public.picks (rating);
 create index if not exists picks_settled_idx on public.picks (settled);
+create index if not exists picks_model_version_idx on public.picks (model_version);
+
+-- A V6 bővítéseit meglévő adatbázison a supabase/migrations mappa
+-- idempotens migrációja alkalmazza. Ide tartozik a model_runs, settlement_runs,
+-- analysis_locks és model_calibration nézet is.
 
 -- A böngésző SOHA nem kap Supabase titkos kulcsot.
 -- Minden adatbázis-művelet a Netlify Functions szerveroldaláról történik.
