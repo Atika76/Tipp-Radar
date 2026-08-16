@@ -55,7 +55,7 @@ V6 MŰKÖDÉS
 - Csak legalább 5 perccel később kezdődő esemény jelenhet meg aktív elemzésként.
 - Az elemzési cache legfeljebb 60 percig, illetve az első kezdés előtt 5 percig él.
 - Az azonos elemzési kéréseket a rendszer összevonja, és Supabase lockkal védi.
-- A today Netlify function látogatónként korlátozza a kéréseket.
+- A /api/today Netlify function látogatónként korlátozza a kéréseket.
 - A napi automatikus elszámolás 02:15 UTC-kor fut.
 - Az elszámolás modellverziót, eredményt, profitot és Brier-hibát tárol.
 - 100 értékelhető lezárt eredmény alatt a kalibráció kis mintát jelez.

@@ -52,4 +52,4 @@ export default async function today(request){
   return new Response(result.body,{status:result.statusCode,headers:result.headers});
 }
 
-export const config={path:'/.netlify/functions/today',rateLimit:{windowLimit:24,windowSize:60,aggregateBy:['ip','domain']}};
+export const config={path:'/api/today',rateLimit:{windowLimit:24,windowSize:60,aggregateBy:['ip','domain']}};

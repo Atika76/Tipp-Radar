@@ -82,7 +82,7 @@ test('keves venue-adat csokkenti az adatminoseget es nem kap venue-korrekciot',(
 
 test('a today rate limit explicit Netlify path-hoz tartozik',async()=>{
   const {config,default:today}=await import('../netlify/functions/today.mjs');
-  assert.equal(config.path,'/.netlify/functions/today');
+  assert.equal(config.path,'/api/today');
   assert.equal(config.rateLimit.windowLimit,24);
   const response=await today(new Request('https://example.test/.netlify/functions/today?sport=football'));
   assert.equal(response.status,200);
