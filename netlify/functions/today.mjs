@@ -42,7 +42,18 @@ export async function handler(event){
         await putCache(cacheKey,payload,cacheExpiresAt);
       }
       return json(200,payload);
-    }catch(e){console.error('today',sport,e);return json(500,{sport,error:e.message||'Ismeretlen hiba a sportelemzés közben.'});}
+    }catch(e){
+      console.error('today',sport,e);
+      if(supabaseConfigured()){
+        for(const fallbackKey of [cacheKey,`analysis:${date}:v6.0.1:${sport}`]){
+          const fallback=await getCache(fallbackKey,{allowExpired:true});
+          if(!fallback)continue;
+          const picks=filterUpcomingPicks(fallback.picks);
+          return json(200,{...fallback,picks,persistence:true,cached:true,degraded:true,currentModelVersion:MODEL_VERSION,sourceModelVersion:fallback.modelVersion||null,providerError:e.message||'A sportadat-szolgáltató nem érhető el.',note:'A sportadat-szolgáltató jelenleg nem érhető el. Az utolsó sikeres elemzés még el nem kezdődött eseményei láthatók; új tipp nem készült.'});
+        }
+      }
+      return json(500,{sport,error:e.message||'Ismeretlen hiba a sportelemzés közben.'});
+    }
     finally{if(lock?.claimed)await releaseAnalysisLock(cacheKey,lock.ownerId);}
   });
 }

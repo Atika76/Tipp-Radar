@@ -11,7 +11,8 @@ async function analyseSport(sport){
   for(let attempt=1;attempt<=2;attempt++){
     const response=await analyseToday({queryStringParameters:{sport},internalScheduled:true});
     const body=JSON.parse(response.body||'{}');
-    if(response.statusCode===200)return{sport,statusCode:200,payload:body,attempt};
+    if(response.statusCode===200&&!body.degraded)return{sport,statusCode:200,payload:body,attempt};
+    if(body.degraded)return{sport,statusCode:503,error:body.providerError||body.note||'Csak korábbi elemzés érhető el.',fallbackAvailable:true,attempt};
     last={sport,statusCode:response.statusCode,error:body.error||body.note||`HTTP ${response.statusCode}`,attempt};
     if(response.statusCode!==202)break;
     await sleep(2000);
