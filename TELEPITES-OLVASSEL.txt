@@ -81,6 +81,12 @@ futási idejét. Magyar nyári idő szerint ez 04:00, téli idő szerint 03:00.
 A háttérfeladat HMAC-hitelesítést használ a már meglévő Supabase szerveroldali
 titokkal. Új környezeti változó és új Supabase-migráció nem szükséges.
 
+Ha az API-Sports szolgáltató hibát vagy fiók-/kvótakorlátozást jelez, a rendszer
+nem gyárt új tippet. Ilyenkor kizárólag a legutóbbi sikeres elemzés még el nem
+kezdődött eseményeit mutathatja, külön figyelmeztetéssel. A daily-status a hibás
+sportokat sikertelenként rögzíti, ezért a szolgáltatói hiba nem látszik 9/9
+sikeres automatikus futásnak.
+
 CSAPATSPORTMODELL
 -----------------
 - A frissebb lezárt mérkőzések nagyobb súlyt kapnak.

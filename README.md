@@ -9,6 +9,7 @@ Adatvezérelt, több sportágú valószínűségi elemző. Nem ígér biztos ere
 - modellverzió, adatminőség és bizonyítékok mentése Supabase-be;
 - napi automatikus elszámolás és Brier-alapú kalibráció;
 - napi automatikus 9 sportos elemzés háttérfeladattal, Supabase-mentéssel és eltárolt TOP 5-tel;
+- sportadat-szolgáltatói hiba esetén csak a legutóbbi sikeres elemzés még el nem kezdődött eseményei jelennek meg, jól látható figyelmeztetéssel;
 - kérés-összevonás, elosztott elemzési zár és Netlify rate limit;
 - MMA/F1 csak információs mód, amíg nincs kalibrált, ellenőrizhető modell;
 - 18+ felelős játék, adatkezelési és modell-átláthatósági oldalak.

@@ -89,13 +89,13 @@ async function supaRpc(name,body={}) {
   return supa(`rpc/${encodeURIComponent(name)}`,{method:'POST',body});
 }
 
-async function getCache(cacheKey) {
+async function getCache(cacheKey,options={}) {
   if (!supabaseConfigured()) return null;
   try {
     const rows = await supa(`app_cache?cache_key=eq.${encodeURIComponent(cacheKey)}&select=payload,expires_at&limit=1`);
     const row = Array.isArray(rows) ? rows[0] : null;
     if (!row) return null;
-    if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+    if (row.expires_at && new Date(row.expires_at) < new Date() && !options.allowExpired) return null;
     return row.payload || null;
   } catch (e) { console.error('cache read', e.message); return null; }
 }

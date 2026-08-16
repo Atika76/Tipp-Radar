@@ -51,6 +51,19 @@ test('az automatikus napi cache a teljes napra stabil marad',()=>{
   assert.equal(Date.parse(shared.dailyCacheExpiry(now)),now+26*60*60000);
 });
 
+test('lejart cache csak kifejezett szolgaltatoi tartalek modban olvashato',async()=>{
+  const original={url:process.env.SUPABASE_URL,secret:process.env.SUPABASE_SECRET_KEY,fetch:global.fetch};
+  process.env.SUPABASE_URL='https://supabase.test';process.env.SUPABASE_SECRET_KEY='teszt-titok';
+  global.fetch=async()=>new Response(JSON.stringify([{payload:{sport:'football',picks:[]},expires_at:'2020-01-01T00:00:00.000Z'}]),{status:200,headers:{'content-type':'application/json'}});
+  try{
+    assert.equal(await shared.getCache('regi'),null);
+    assert.deepEqual(await shared.getCache('regi',{allowExpired:true}),{sport:'football',picks:[]});
+  }finally{
+    global.fetch=original.fetch;
+    for(const [key,value] of [['SUPABASE_URL',original.url],['SUPABASE_SECRET_KEY',original.secret]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+  }
+});
+
 test('a napi hatterfeladat hitelesitese es TOP 5 rendezese determinisztikus',()=>{
   const original=process.env.SUPABASE_SECRET_KEY;process.env.SUPABASE_SECRET_KEY='teszt-titok';
   const token=daily.dailyToken('2026-08-16');
