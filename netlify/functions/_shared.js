@@ -1,5 +1,16 @@
-const API_BASE = 'https://v3.football.api-sports.io';
 const TZ = 'Europe/Budapest';
+
+const SPORT_CONFIG = {
+  football:   { code:1, label:'Foci', emoji:'⚽', base:'https://v3.football.api-sports.io', endpoint:'fixtures', idParam:'fixture', draw:true },
+  basketball: { code:2, label:'Kosárlabda', emoji:'🏀', base:'https://v1.basketball.api-sports.io', endpoint:'games', idParam:'game', draw:false },
+  hockey:     { code:3, label:'Jégkorong', emoji:'🏒', base:'https://v1.hockey.api-sports.io', endpoint:'games', idParam:'game', draw:true },
+  nfl:        { code:4, label:'NFL', emoji:'🏈', base:'https://v1.american-football.api-sports.io', endpoint:'games', idParam:'game', draw:false },
+  baseball:   { code:5, label:'Baseball', emoji:'⚾', base:'https://v1.baseball.api-sports.io', endpoint:'games', idParam:'game', draw:false },
+  handball:   { code:6, label:'Kézilabda', emoji:'🤾', base:'https://v1.handball.api-sports.io', endpoint:'games', idParam:'game', draw:true },
+  volleyball: { code:7, label:'Röplabda', emoji:'🏐', base:'https://v1.volleyball.api-sports.io', endpoint:'games', idParam:'game', draw:false },
+  mma:        { code:8, label:'MMA', emoji:'🥊', base:'https://v1.mma.api-sports.io', endpoint:'fights', idParam:'fight', draw:false },
+  formula1:   { code:9, label:'F1', emoji:'🏎️', base:'https://v1.formula-1.api-sports.io', endpoint:'races', idParam:'race', draw:false }
+};
 
 function json(statusCode, body, extraHeaders = {}) {
   return {
@@ -24,24 +35,29 @@ function yesterdayBudapest() {
   return utc.toISOString().slice(0,10);
 }
 
-function apiConfigured() { return Boolean(process.env.API_FOOTBALL_KEY); }
+function apiKey() { return process.env.API_SPORTS_KEY || process.env.API_FOOTBALL_KEY || ''; }
+function apiConfigured() { return Boolean(apiKey()); }
 function supabaseConfigured() { return Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)); }
 function supabaseKey() { return process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''; }
 
-async function football(path, params = {}) {
-  if (!apiConfigured()) throw new Error('API_FOOTBALL_KEY nincs beállítva.');
+async function sportApi(sport, path, params = {}) {
+  const cfg = SPORT_CONFIG[sport];
+  if (!cfg) throw new Error(`Ismeretlen sport: ${sport}`);
+  if (!apiConfigured()) throw new Error('API_FOOTBALL_KEY / API_SPORTS_KEY nincs beállítva.');
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k,v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, String(v)); });
-  const url = `${API_BASE}/${path}${qs.size ? '?' + qs.toString() : ''}`;
-  const res = await fetch(url, { headers: { 'x-apisports-key': process.env.API_FOOTBALL_KEY, 'accept':'application/json' } });
+  const url = `${cfg.base}/${path}${qs.size ? '?' + qs.toString() : ''}`;
+  const res = await fetch(url, { headers: { 'x-apisports-key': apiKey(), 'accept':'application/json' } });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`API-Football HTTP ${res.status}`);
-  if (payload.errors && Object.keys(payload.errors).length) {
-    const msg = typeof payload.errors === 'string' ? payload.errors : Object.values(payload.errors).join('; ');
-    throw new Error(`API-Football: ${msg}`);
+  if (!res.ok) throw new Error(`${cfg.label} API HTTP ${res.status}`);
+  if (payload.errors && (typeof payload.errors === 'string' ? payload.errors : Object.keys(payload.errors).length)) {
+    const msg = typeof payload.errors === 'string' ? payload.errors : Object.values(payload.errors).flat().join('; ');
+    throw new Error(`${cfg.label} API: ${msg}`);
   }
-  return payload.response || [];
+  return { response: payload.response || [], paging: payload.paging || null, parameters: payload.parameters || {}, raw: payload };
 }
+
+async function football(path, params={}) { return (await sportApi('football',path,params)).response; }
 
 function supaHeaders(extra = {}) {
   const key = supabaseKey();
@@ -73,21 +89,29 @@ async function getCache(cacheKey) {
     if (!row) return null;
     if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
     return row.payload || null;
-  } catch (e) {
-    console.error('cache read', e.message);
-    return null;
-  }
+  } catch (e) { console.error('cache read', e.message); return null; }
 }
 
 async function putCache(cacheKey, payload, expiresAt) {
   if (!supabaseConfigured()) return;
   try {
     await supa('app_cache?on_conflict=cache_key', {
-      method:'POST',
-      headers:{ 'Prefer':'resolution=merge-duplicates,return=minimal' },
+      method:'POST', headers:{ 'Prefer':'resolution=merge-duplicates,return=minimal' },
       body:[{ cache_key:cacheKey, payload, expires_at:expiresAt || null, updated_at:new Date().toISOString() }]
     });
   } catch (e) { console.error('cache write', e.message); }
+}
+
+async function cachedSportCall(sport, cacheKey, path, params, ttlMinutes=720) {
+  const fullKey = `api:${sport}:${cacheKey}`;
+  const cached = await getCache(fullKey);
+  if (cached) return cached;
+  const result = (await sportApi(sport,path,params)).response;
+  if (supabaseConfigured()) {
+    const expires = new Date(Date.now()+ttlMinutes*60000).toISOString();
+    await putCache(fullKey,result,expires);
+  }
+  return result;
 }
 
 function parsePercent(value) {
@@ -95,202 +119,115 @@ function parsePercent(value) {
   const n = Number(String(value).replace('%','').replace(',','.'));
   return Number.isFinite(n) ? n : null;
 }
-
-function median(arr) {
-  const xs = arr.map(Number).filter(Number.isFinite).sort((a,b) => a-b);
-  if (!xs.length) return null;
-  const mid = Math.floor(xs.length/2);
-  return xs.length % 2 ? xs[mid] : (xs[mid-1] + xs[mid]) / 2;
-}
-
+function median(arr) { const xs=arr.map(Number).filter(Number.isFinite).sort((a,b)=>a-b); if(!xs.length)return null; const m=Math.floor(xs.length/2); return xs.length%2?xs[m]:(xs[m-1]+xs[m])/2; }
+function mean(arr) { const xs=arr.map(Number).filter(Number.isFinite); return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null; }
 function clamp(n,min,max){ return Math.max(min,Math.min(max,n)); }
-
-function normalizeProbabilities(home, draw, away) {
-  const vals = [home,draw,away].map(v => Number(v));
-  if (!vals.every(Number.isFinite)) return {home:33.3, draw:33.4, away:33.3};
-  const sum = vals.reduce((a,b)=>a+b,0) || 100;
-  return { home: vals[0]*100/sum, draw: vals[1]*100/sum, away: vals[2]*100/sum };
+function normalCdf(x) { // Abramowitz-Stegun approximation
+  const t=1/(1+0.2316419*Math.abs(x));
+  const d=0.3989423*Math.exp(-x*x/2);
+  let p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));
+  p=1-p; return x>=0?p:1-p;
 }
+function normalize2(a,b){ const x=Math.max(.001,Number(a)||0), y=Math.max(.001,Number(b)||0), s=x+y; return {home:x*100/s,away:y*100/s}; }
+function normalize3(a,d,b){ const vals=[a,d,b].map(v=>Math.max(.001,Number(v)||0)); const s=vals.reduce((x,y)=>x+y,0); return {home:vals[0]*100/s,draw:vals[1]*100/s,away:vals[2]*100/s}; }
 
-function leaguePriority(f) {
-  const country = String(f?.league?.country || '').toLowerCase();
-  const name = String(f?.league?.name || '').toLowerCase();
-  const majorCountries = ['england','spain','italy','germany','france','netherlands','portugal','belgium','scotland','turkey','hungary','austria','switzerland','denmark','sweden','norway'];
-  let score = 0;
-  if (majorCountries.includes(country)) score += 50;
-  if (['world','euro cups'].includes(country)) score += 35;
-  if (/premier|championship|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira|super lig|premiership|champions|europa|conference|nb i/.test(name)) score += 40;
-  if (f?.league?.type === 'League') score += 8;
-  const status = f?.fixture?.status?.short;
-  if (['NS','TBD'].includes(status)) score += 10;
-  return score;
+function syntheticId(sport, sourceId) {
+  const code=SPORT_CONFIG[sport]?.code || 0;
+  const id=Number(sourceId);
+  if (!Number.isFinite(id)) return code*1000000000000 + Math.abs(hashCode(String(sourceId)))%999999999999;
+  return code*1000000000000 + Math.abs(Math.trunc(id))%999999999999;
 }
+function sourceIdFromSynthetic(sport, id) { return Number(id) % 1000000000000; }
+function hashCode(str){ let h=0; for(let i=0;i<str.length;i++) h=((h<<5)-h)+str.charCodeAt(i)|0; return h; }
 
-function pickCandidates(fixtures, max = 12) {
-  return fixtures
-    .filter(f => ['NS','TBD'].includes(f?.fixture?.status?.short))
-    .map(f => ({f, score:leaguePriority(f)}))
-    .sort((a,b) => b.score-a.score || new Date(a.f.fixture.date)-new Date(b.f.fixture.date))
-    .slice(0,max)
-    .map(x => x.f);
-}
-
-function extractOdds(oddsPayload, homeName, awayName) {
-  const samples = {home:[],draw:[],away:[]};
-  for (const block of oddsPayload || []) {
-    for (const bm of block.bookmakers || []) {
-      const bet = (bm.bets || []).find(b => /match winner|1x2|winner/i.test(String(b.name || '')));
-      if (!bet) continue;
-      for (const v of bet.values || []) {
-        const label = String(v.value || '').trim().toLowerCase();
-        const odd = Number(v.odd);
-        if (!Number.isFinite(odd)) continue;
-        if (label === 'home' || label === '1' || label === homeName.toLowerCase()) samples.home.push(odd);
-        else if (label === 'draw' || label === 'x') samples.draw.push(odd);
-        else if (label === 'away' || label === '2' || label === awayName.toLowerCase()) samples.away.push(odd);
-      }
-    }
-  }
-  return { home:median(samples.home), draw:median(samples.draw), away:median(samples.away), bookmakerCount: Math.max(samples.home.length,samples.draw.length,samples.away.length) };
-}
-
-function injuryCounts(payload, homeId, awayId) {
-  let home=0, away=0;
-  for (const i of payload || []) {
-    if (i?.team?.id === homeId) home++;
-    if (i?.team?.id === awayId) away++;
-  }
-  return {home,away};
-}
-
-function predictionProbs(prediction) {
-  const p = prediction?.predictions?.percent || {};
-  return normalizeProbabilities(parsePercent(p.home), parsePercent(p.draw), parsePercent(p.away));
-}
-
-function adjustedProbs(base, injuries) {
-  let {home,draw,away} = base;
-  const delta = clamp((injuries.away - injuries.home) * 0.75, -4.5, 4.5);
-  home += delta;
-  away -= delta;
-  return normalizeProbabilities(clamp(home,4,92), clamp(draw,6,70), clamp(away,4,92));
-}
-
-function evaluateSelection(probs, odds) {
-  const options = [
-    {key:'home',label:'1',prob:probs.home,odd:odds.home},
-    {key:'draw',label:'X',prob:probs.draw,odd:odds.draw},
-    {key:'away',label:'2',prob:probs.away,odd:odds.away}
-  ].map(o => ({...o, ev: o.odd ? (o.prob/100*o.odd-1)*100 : -999, fair: o.prob ? 100/o.prob : null}));
-  return options.sort((a,b)=>b.ev-a.ev)[0];
-}
-
-function buildReasons({selection, probs, odds, injuries, prediction}) {
-  const reasons=[];
-  if (selection.odd) {
-    if (selection.ev >= 6) reasons.push(`A becsült ${selection.prob.toFixed(1)}%-os esélyhez ${selection.fair.toFixed(2)} fair odds tartozik, miközben a piaci medián ${selection.odd.toFixed(2)}.`);
-    else if (selection.ev < 0) reasons.push('A piaci odds nem ad elég értéket a számított valószínűséghez képest.');
-  } else reasons.push('Nem találtam használható 1X2 piaci oddsot, ezért ezt a meccset nem jelölöm erős tippnek.');
-  const diff = injuries.home - injuries.away;
-  if (Math.abs(diff) >= 2) reasons.push(diff > 0 ? `A hazai oldalon ${Math.abs(diff)}-vel több elérhető sérülés/hiányzó szerepel az adatforrásban.` : `A vendég oldalon ${Math.abs(diff)}-vel több elérhető sérülés/hiányzó szerepel az adatforrásban.`);
-  const winner = prediction?.predictions?.winner?.name;
-  if (winner) reasons.push(`Az API-Football prediction moduljának kijelölt esélyese: ${winner}.`);
-  const maxProb = Math.max(probs.home,probs.draw,probs.away);
-  if (maxProb < 48) reasons.push('A három kimenetel közül egyik sem emelkedik ki eléggé; a meccs kifejezetten bizonytalan.');
-  return reasons.slice(0,4);
-}
-
-async function analyseFixture(f) {
-  const fixtureId = f.fixture.id;
-  const homeId = f.teams.home.id, awayId = f.teams.away.id;
-  const [predR,injR,oddsR] = await Promise.allSettled([
-    football('predictions',{fixture:fixtureId}),
-    football('injuries',{fixture:fixtureId}),
-    football('odds',{fixture:fixtureId})
-  ]);
-  const prediction = predR.status === 'fulfilled' ? predR.value[0] : null;
-  const injuriesRaw = injR.status === 'fulfilled' ? injR.value : [];
-  const oddsRaw = oddsR.status === 'fulfilled' ? oddsR.value : [];
-  const injuries = injuryCounts(injuriesRaw,homeId,awayId);
-  const probs = adjustedProbs(predictionProbs(prediction),injuries);
-  const odds = extractOdds(oddsRaw,f.teams.home.name,f.teams.away.name);
-  const sel = evaluateSelection(probs,odds);
-  const chosenName = sel.key === 'home' ? f.teams.home.name : sel.key === 'away' ? f.teams.away.name : 'Döntetlen';
-  const coverageParts = [prediction ? 1:0, injR.status === 'fulfilled' ? 1:0, odds.bookmakerCount ? 1:0].reduce((a,b)=>a+b,0);
-  const coverage = coverageParts === 3 ? 'Magas' : coverageParts === 2 ? 'Közepes' : 'Alacsony';
-  let rating='red';
-  if (coverage !== 'Alacsony' && sel.odd && sel.prob >= 52 && sel.ev >= 6 && sel.odd >= 1.30) rating='green';
-  else if (sel.odd && sel.prob >= 45 && sel.ev >= 1) rating='yellow';
-  const recommendation = rating === 'red' ? 'Kihagyás' : `${chosenName} (${sel.label})`;
-  return {
-    fixtureId,
-    league:f.league.name,
-    country:f.league.country,
-    home:f.teams.home.name,
-    away:f.teams.away.name,
-    kickoff:f.fixture.date,
-    status:f.fixture.status.short,
-    recommendation,
-    market:sel.label,
-    probability:Number(sel.prob.toFixed(2)),
-    fairOdds:sel.fair ? Number(sel.fair.toFixed(2)) : null,
-    marketOdds:sel.odd ? Number(sel.odd.toFixed(2)) : null,
-    edge:Number.isFinite(sel.ev) && sel.ev > -900 ? Number(sel.ev.toFixed(2)) : null,
-    rating,
-    probabilities:{home:Number(probs.home.toFixed(1)),draw:Number(probs.draw.toFixed(1)),away:Number(probs.away.toFixed(1))},
-    injuries,
-    apiAdvice:prediction?.predictions?.advice || null,
-    coverage,
-    reasons:buildReasons({selection:sel,probs,odds,injuries,prediction}),
-    bookmakerCount:odds.bookmakerCount || 0
-  };
-}
+function parseSportTag(text='') { const m=String(text).match(/\[sport:([a-z0-9-]+)\]/i); return m?m[1]:'football'; }
+function withSportTag(sport,text='') { return `[sport:${sport}]${text?` ${text}`:''}`; }
 
 async function savePicks(date,picks) {
-  if (!supabaseConfigured() || !picks.length) return;
-  const rows = picks.map(p => ({
-    fixture_id:p.fixtureId, pick_date:date, league:p.league, country:p.country, home_team:p.home, away_team:p.away,
-    kickoff:p.kickoff, recommendation:p.recommendation, market:p.market, probability:p.probability, fair_odds:p.fairOdds,
-    market_odds:p.marketOdds, edge:p.edge, rating:p.rating, probabilities:p.probabilities, injuries:p.injuries,
-    api_advice:p.apiAdvice, coverage:p.coverage, reasons:p.reasons, updated_at:new Date().toISOString()
+  if (!supabaseConfigured()) return;
+  const recommended=(picks||[]).filter(p=>p.rating==='green' || p.rating==='yellow');
+  if (!recommended.length) return;
+  const rows=recommended.map(p=>({
+    fixture_id:p.fixtureId, pick_date:date, league:p.league||p.eventName||p.sportLabel, country:p.country||p.sportLabel,
+    home_team:p.home||p.participantA||p.eventName||p.sportLabel, away_team:p.away||p.participantB||'—', kickoff:p.kickoff,
+    recommendation:p.recommendation, market:p.market, probability:p.probability, fair_odds:p.fairOdds, market_odds:p.marketOdds,
+    edge:p.edge, rating:p.rating, probabilities:p.probabilities||{}, injuries:p.injuries||{},
+    api_advice:withSportTag(p.sport,p.apiAdvice||p.modelName||''), coverage:p.coverage, reasons:p.reasons||[], updated_at:new Date().toISOString()
   }));
   try {
     await supa('picks?on_conflict=fixture_id,pick_date', {method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:rows});
   } catch(e) { console.error('save picks',e.message); }
 }
 
+function scoreFromGame(raw,side) {
+  const candidates=[raw?.scores?.[side]?.total,raw?.scores?.[side]?.points,raw?.scores?.[side],raw?.goals?.[side],raw?.score?.[side],raw?.results?.[side]];
+  for(const v of candidates){ const n=Number(v); if(Number.isFinite(n)) return n; }
+  return null;
+}
+
+function rawGameId(raw){ return raw?.id ?? raw?.game?.id ?? raw?.fixture?.id ?? raw?.fight?.id ?? raw?.race?.id; }
+
+function isFinished(raw) {
+  const s=String(raw?.status?.short ?? raw?.status?.long ?? raw?.status ?? raw?.fixture?.status?.short ?? '').toLowerCase();
+  return /ft|finished|after|aet|pen|final|completed|ended|closed/.test(s);
+}
+
+function resultFromRaw(raw) {
+  const h=scoreFromGame(raw,'home'), a=scoreFromGame(raw,'away');
+  if(Number.isFinite(h)&&Number.isFinite(a)) return {home:h,away:a};
+  return null;
+}
+
+function settleMarket(market,result) {
+  if(!result || !market) return null;
+  const margin=result.home-result.away, total=result.home+result.away;
+  if(market==='ML_HOME') return {won:margin>0,push:margin===0};
+  if(market==='ML_AWAY') return {won:margin<0,push:margin===0};
+  if(market==='ML_DRAW') return {won:margin===0,push:false};
+  let m=String(market).match(/^SPREAD_(HOME|AWAY):(-?\d+(?:\.\d+)?)$/);
+  if(m){ const line=Number(m[2]); const adjusted=m[1]==='HOME'?margin+line:-margin+line; return {won:adjusted>0,push:adjusted===0}; }
+  m=String(market).match(/^TOTAL_(OVER|UNDER):(\d+(?:\.\d+)?)$/);
+  if(m){ const line=Number(m[2]); if(total===line)return {won:null,push:true}; return {won:m[1]==='OVER'?total>line:total<line,push:false}; }
+  return null;
+}
+
+async function fetchDayEvents(sport,date) {
+  const cfg=SPORT_CONFIG[sport];
+  if(!cfg) return [];
+  if(sport==='football') return (await sportApi(sport,'fixtures',{date,timezone:TZ})).response;
+  if(sport==='formula1') return (await sportApi(sport,'races',{date,timezone:TZ})).response;
+  if(sport==='mma') return (await sportApi(sport,'fights',{date,timezone:TZ})).response;
+  return (await sportApi(sport,'games',{date,timezone:TZ})).response;
+}
+
 async function settleYesterday() {
   if (!supabaseConfigured() || !apiConfigured()) return;
-  const date = yesterdayBudapest();
+  const date=yesterdayBudapest();
   try {
-    const pending = await supa(`picks?pick_date=eq.${date}&settled=eq.false&select=fixture_id,market,market_odds&limit=100`);
-    if (!Array.isArray(pending) || !pending.length) return;
-    const results = await football('fixtures',{date,timezone:TZ});
-    const byId = new Map(results.map(r => [r.fixture.id,r]));
-    for (const pick of pending) {
-      const r=byId.get(pick.fixture_id);
-      if (!r || !['FT','AET','PEN'].includes(r.fixture?.status?.short)) continue;
-      const hg=Number(r.goals.home), ag=Number(r.goals.away);
-      const actual = hg>ag?'1':hg<ag?'2':'X';
-      const won = pick.market === actual;
-      const unitProfit = won && pick.market_odds ? Number(pick.market_odds)-1 : -1;
-      await supa(`picks?fixture_id=eq.${pick.fixture_id}&pick_date=eq.${date}`, {
-        method:'PATCH',headers:{'Prefer':'return=minimal'},body:{settled:true,won,home_score:hg,away_score:ag,unit_profit:unitProfit,updated_at:new Date().toISOString()}
-      });
+    const pending=await supa(`picks?pick_date=eq.${date}&settled=eq.false&select=fixture_id,market,market_odds,api_advice&limit=250`);
+    if(!Array.isArray(pending)||!pending.length)return;
+    const groups={};
+    for(const p of pending){ const sport=parseSportTag(p.api_advice); (groups[sport] ||= []).push(p); }
+    for(const [sport,rows] of Object.entries(groups)) {
+      if(sport==='formula1'||sport==='mma') continue; // MMA/F1 eredményformátumot nem találgatjuk.
+      let events=[]; try { events=await fetchDayEvents(sport,date); } catch(e){ console.error('settle fetch',sport,e.message); continue; }
+      const byId=new Map(events.map(r=>[Number(rawGameId(r)),r]));
+      for(const pick of rows){
+        const src=sourceIdFromSynthetic(sport,pick.fixture_id); const raw=byId.get(Number(src));
+        if(!raw||!isFinished(raw))continue;
+        const result=resultFromRaw(raw); const settled=settleMarket(pick.market,result); if(!settled)continue;
+        const unitProfit=settled.push?0:(settled.won&&pick.market_odds?Number(pick.market_odds)-1:-1);
+        await supa(`picks?fixture_id=eq.${pick.fixture_id}&pick_date=eq.${date}`,{method:'PATCH',headers:{'Prefer':'return=minimal'},body:{settled:true,won:settled.push?null:Boolean(settled.won),home_score:result.home,away_score:result.away,unit_profit:unitProfit,updated_at:new Date().toISOString()}});
+      }
     }
-  } catch(e) { console.error('settlement',e.message); }
+  } catch(e){ console.error('settlement',e.message); }
 }
 
-function demoPayload(date) {
-  return {
-    date, generatedAt:new Date().toISOString(), totalFixtures:36, demo:true, persistence:false,
-    picks:[
-      {fixtureId:1,league:'DEMO Liga',country:'Minta',home:'Kék FC',away:'Fehér FC',kickoff:new Date().toISOString(),recommendation:'Kék FC (1)',market:'1',probability:62.4,fairOdds:1.60,marketOdds:1.88,edge:17.3,rating:'green',probabilities:{home:62.4,draw:22.1,away:15.5},injuries:{home:1,away:3},apiAdvice:'Demo adat',coverage:'Magas',reasons:['Ez csak bemutató adat, hogy kulcs nélkül is lásd a teljes működő felületet.','Éles API-kulcs beállítása után valódi mai meccsekkel számol.']},
-      {fixtureId:2,league:'DEMO Liga',country:'Minta',home:'Város SC',away:'United',kickoff:new Date(Date.now()+3600000).toISOString(),recommendation:'Kihagyás',market:'X',probability:31.8,fairOdds:3.14,marketOdds:3.05,edge:-3.0,rating:'red',probabilities:{home:35.2,draw:31.8,away:33.0},injuries:{home:1,away:1},apiAdvice:'Demo adat',coverage:'Magas',reasons:['A három kimenetel túl közel van egymáshoz.','A piaci odds nem ad értéket a számított esélyhez képest.']}
-    ]
-  };
+function demoPayload(date,sport='football') {
+  const cfg=SPORT_CONFIG[sport]||SPORT_CONFIG.football;
+  return {sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,date,generatedAt:new Date().toISOString(),totalEvents:12,eligibleEvents:2,demo:true,persistence:false,picks:[{
+    sport,sportLabel:cfg.label,sportEmoji:cfg.emoji,fixtureId:syntheticId(sport,1),sourceId:1,league:'DEMO Liga',country:'Minta',home:'Kék',away:'Fehér',kickoff:new Date(Date.now()+3600000).toISOString(),recommendation:'Kék – győzelem',market:'ML_HOME',marketLabel:'Győztes',probability:62.4,fairOdds:1.60,marketOdds:1.88,edge:17.3,rating:'green',probabilities:{home:62.4,away:37.6},injuries:{home:0,away:0},apiAdvice:'Demo adat',coverage:'Magas',modelName:`${cfg.label} saját modell`,reasons:['Ez bemutató adat. Éles API-kulccsal valódi események jelennek meg.']
+  }]};
 }
 
-module.exports = {
-  json,todayBudapest,apiConfigured,supabaseConfigured,football,supa,getCache,putCache,pickCandidates,analyseFixture,savePicks,settleYesterday,demoPayload,TZ
-};
+module.exports={json,TZ,SPORT_CONFIG,todayBudapest,yesterdayBudapest,apiConfigured,supabaseConfigured,sportApi,football,supa,getCache,putCache,cachedSportCall,parsePercent,median,mean,clamp,normalCdf,normalize2,normalize3,syntheticId,sourceIdFromSynthetic,parseSportTag,withSportTag,savePicks,scoreFromGame,rawGameId,isFinished,resultFromRaw,settleMarket,settleYesterday,demoPayload};

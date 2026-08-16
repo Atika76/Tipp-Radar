@@ -1,50 +1,104 @@
-TIPPRADAR – TELEPÍTÉSI TÉRKÉP
-=============================
+TIPP RADAR – SPORTELEMZŐ v2
+============================
 
-Ne ijedj meg ettől a fájltól: amikor együtt telepítjük, képernyőről képernyőre végigmegyünk rajta.
+EZ A VERZIÓ MÁR NEM CSAK FOCI.
 
-A projekt úgy van elkészítve, hogy:
-- kulcs nélkül is elindul DEMÓ módban;
-- API-Football kulccsal valódi mai meccseket elemez;
-- Supabase nélkül is működik, csak nem őrzi meg tartósan a tippeket;
-- Supabase-szel eltárolja a tippeket, eredményeket, ROI-t és cache-t;
-- a titkos kulcsok NINCSENEK a GitHub-kódban.
+Támogatott sportfülek:
+- ⚽ Foci
+- 🏀 Kosárlabda
+- 🏒 Jégkorong
+- 🏈 NFL
+- ⚾ Baseball
+- 🤾 Kézilabda
+- 🏐 Röplabda
+- 🥊 MMA
+- 🏎️ Formula 1
 
-NETLIFY KÖRNYEZETI VÁLTOZÓK
----------------------------
+FONTOS: a jelenlegi Netlify + Supabase beállításaidat NEM kell újrakezdeni.
+A már felvett környezeti változók maradnak:
+
 1) API_FOOTBALL_KEY
-   Az API-Sports / API-Football kulcs.
+   A meglévő API-Sports kulcsod. A program ezt használja az API-Sports külön sport-végpontjaihoz is.
+   Opcionálisan API_SPORTS_KEY néven is megadható; ha mindkettő van, az API_SPORTS_KEY az elsődleges.
 
 2) SUPABASE_URL
-   Példa: https://xxxxxxxx.supabase.co
 
 3) SUPABASE_SECRET_KEY
-   A Supabase új típusú, szerveroldali Secret key-je (sb_secret_...).
-   Ha a projekted régi kulcsokat használ, SUPABASE_SERVICE_ROLE_KEY néven a service_role kulcs is jó.
-
-FONTOS:
-- SUPABASE_SECRET_KEY vagy SERVICE_ROLE kulcsot SOHA ne tedd GitHubba.
-- SOHA ne küldd el nyilvános bejegyzésben vagy képernyőfotón úgy, hogy olvasható legyen.
-- A kód kizárólag a Netlify Functions szerveroldalán olvassa ezeket.
 
 SUPABASE
 --------
-A supabase/schema.sql teljes tartalmát kell majd egyszer lefuttatni a Supabase SQL Editorban.
-Két tábla készül:
-- app_cache: az API-kvóta kímélésére;
-- picks: a napi tippek és későbbi eredmények bizonyítására.
+A v1-ben már lefuttatott supabase/schema.sql továbbra is megfelelő.
+Nem kell új táblát létrehozni ehhez a verzióhoz.
+A sportág az eltárolt rekordban szerveroldali sportcímkével kerül megőrzésre, ezért a régi adatbázis is használható.
 
-MŰKÖDÉS
--------
-1. Lekéri egyetlen hívással a mai meccseket.
-2. Kiválaszt legfeljebb 12 fontosabb / értelmezhető meccset.
-3. Ezeknél lekéri a prediction, injuries és odds adatokat.
-4. Saját szabályrendszerrel kiszámolja az 1/X/2 valószínűségeket, fair oddsot és value-t.
-5. Zöld / sárga / piros minősítést ad.
-6. Supabase esetén eltárolja a napi eredményt és ugyanazon a napon új oldalmegnyitáskor nem égeti újra az API-kvótát.
-7. A következő napon a tegnapi eredményeket is lezárja és számolja a teljesítményt.
+MIT JAVÍT A v2?
+---------------
+- A foci nem választ ki vakon U19 vagy alacsonyabb osztályú meccseket csak azért, mert a liga nevében szerepel pl. „Bundesliga”. A női élvonalat nem tiltjuk ki automatikusan: ha van megfelelő odds és adat, elemezhető.
+- Először olyan jelölteket keres, amelyekhez ténylegesen van használható odds, és csak utána végzi a drágább részletes elemzést.
+- Sportonként külön elemzőlogika fut.
+- A kezdőoldal „Mai TOP 5” nézetben az összes sportból csak a legerősebb zöld/sárga lehetőségeket rangsorolja.
+- Ha nincs megfelelő value, a program nem erőltet tippet.
 
-FONTOS KORLÁT
+SPORTMODELLEK
 -------------
-Az API-Football adatlefedettsége bajnokságonként eltérhet. Ha sérülés vagy odds nem érhető el,
-a program ezt adatminőségként jelzi és nem tesz úgy, mintha ismerné a hiányzó adatot.
+Foci:
+- API-Football prediction
+- sérülések/hiányzók
+- 1X2 odds és value
+- utánpótlás/tartalék és alacsony prioritású bajnokságok kiszűrése; női élvonal maradhat, ha van rendes odds
+
+Kosárlabda:
+- utolsó lezárt meccsek pontátlagai
+- támadó/védekező ponttermésből becsült különbség
+- pihenő/back-to-back hatás
+- moneyline, hendikep/spread, over/under
+
+Jégkorong:
+- gólforma
+- hazai előny
+- győztes és over/under
+
+NFL:
+- pontkülönbség
+- pihenőidő
+- elérhető sérülésadat
+- moneyline, spread, over/under
+
+Baseball:
+- futásátlag és futáskülönbség
+- forma
+- moneyline és total
+
+Kézilabda:
+- gólátlag és gólkülönbség
+- moneyline/hendikep/total
+
+Röplabda:
+- szettforma és győzelmi arány
+- moneyline
+
+MMA:
+- fight winner odds
+- elérhető harcos-mérleg/statistika
+- ha nincs elég egységes harcosadat, automatikus kihagyás
+
+Formula 1:
+- versenyek és pilótarangsor
+- az API-Sports F1 adatforrásban nincs klasszikus bookmaker odds-rendszer, ezért a program nem talál ki mesterséges value tippet; az ilyen eseményt információs/kihagyás státuszban mutatja.
+
+API-KVÓTA
+---------
+A program sportonként külön napi cache-t használ a Supabase app_cache táblában.
+A részletes elemzés előtt shortlistet és odds-ellenőrzést végez, így nem próbál több száz eseményhez minden adatot külön lekérni.
+
+FRISSÍTÉS GITHUBON
+------------------
+A ZIP-ben lévő TippRadar-Sportelemzo-v2 mappa TARTALMÁVAL írd felül a Tipp-Radar GitHub repó jelenlegi fájljait.
+A repó gyökerében továbbra is ez legyen:
+- netlify/
+- public/
+- supabase/
+- netlify.toml
+- TELEPITES-OLVASSEL.txt
+
+A GitHub commit után a Netlify automatikusan deployolja az új verziót.

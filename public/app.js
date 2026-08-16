@@ -1,160 +1,44 @@
-const state = { data: null, filtered: [] };
+const SPORTS=[
+  ['football','⚽','Foci'],['basketball','🏀','Kosárlabda'],['hockey','🏒','Jégkorong'],['nfl','🏈','NFL'],['baseball','⚾','Baseball'],['handball','🤾','Kézilabda'],['volleyball','🏐','Röplabda'],['mma','🥊','MMA'],['formula1','🏎️','F1']
+];
+const state={bySport:{},errors:{},loading:new Set(),active:'all',filtered:[],lastGenerated:null};
+const el=id=>document.getElementById(id);
+const fmtPct=n=>Number.isFinite(Number(n))?`${Number(n).toFixed(1)}%`:'—';
+const fmtOdds=n=>Number.isFinite(Number(n))&&Number(n)>0?Number(n).toFixed(2):'—';
+const fmtKickoff=iso=>{if(!iso)return'Időpont nem ismert';const d=new Date(iso);return new Intl.DateTimeFormat('hu-HU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Budapest'}).format(d)};
+async function api(path){const r=await fetch(path,{headers:{Accept:'application/json'}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.message||`HTTP ${r.status}`);return d;}
 
-const el = (id) => document.getElementById(id);
-const fmtPct = (n) => Number.isFinite(Number(n)) ? `${Number(n).toFixed(1)}%` : '—';
-const fmtOdds = (n) => Number.isFinite(Number(n)) && Number(n) > 0 ? Number(n).toFixed(2) : '—';
-const fmtKickoff = (iso) => {
-  if (!iso) return 'Időpont nem ismert';
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat('hu-HU', { weekday:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Budapest' }).format(d);
-};
+async function loadHealth(){try{const h=await api('/.netlify/functions/health');const b=el('modeBadge');if(h.apiConfigured&&h.supabaseConfigured){b.textContent='● ÉLES • MULTISPORT + SUPABASE';b.className='badge badge-green';}else if(h.apiConfigured){b.textContent='● ÉLES • SUPABASE NÉLKÜL';b.className='badge badge-yellow';}else{b.textContent='● DEMÓ • API KULCS KELL';b.className='badge badge-red';}}catch{el('modeBadge').textContent='● HIBA A BEÁLLÍTÁSBAN';el('modeBadge').className='badge badge-red';}}
 
-async function api(path) {
-  const res = await fetch(path, { headers: { 'Accept':'application/json' } });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
-  return data;
+async function loadPerformance(){try{const p=await api('/.netlify/functions/performance');const items=[['Eltárolt zöld tippek',p.total??0],['Találati arány',p.hitRate!=null?fmtPct(p.hitRate):'—'],['ROI',p.roi!=null?fmtPct(p.roi):'—'],['Egység profit',p.profit!=null?Number(p.profit).toFixed(2):'—']];el('performance').innerHTML=items.map(([a,b])=>`<div class="performance-item"><span>${a}</span><strong>${b}</strong></div>`).join('');}catch{el('performance').innerHTML='<div class="performance-item"><span>Állapot</span><strong>Még nincs adat</strong></div>';}}
+
+async function loadSport(sport){state.loading.add(sport);renderProgress();try{const data=await api(`/.netlify/functions/today?sport=${encodeURIComponent(sport)}`);state.bySport[sport]=data;delete state.errors[sport];if(data.generatedAt){const t=new Date(data.generatedAt);if(!state.lastGenerated||t>state.lastGenerated)state.lastGenerated=t;}}catch(e){state.errors[sport]=e.message;}finally{state.loading.delete(sport);renderProgress();renderAll();}}
+
+async function loadAll(){const btn=el('refreshBtn');btn.disabled=true;btn.textContent='Sportok elemzése…';state.bySport={};state.errors={};state.lastGenerated=null;renderAll();await Promise.allSettled(SPORTS.map(([s])=>loadSport(s)));btn.disabled=false;btn.textContent='Mai elemzés frissítése';loadPerformance();}
+
+function allPicks(){return Object.values(state.bySport).flatMap(x=>x?.picks||[]);}
+function top5(){return allPicks().filter(p=>p.rating==='green'||p.rating==='yellow').sort(rankPicks).slice(0,5);}
+function rankPicks(a,b){const r={green:0,yellow:1,red:2};return(r[a.rating]??3)-(r[b.rating]??3)||(b.edge??-999)-(a.edge??-999)||(b.probability??0)-(a.probability??0);}
+
+function renderAll(){renderSummary();applyFilters();}
+function renderSummary(){
+  const all=allPicks();const loaded=Object.keys(state.bySport).length;const total=Object.values(state.bySport).reduce((s,x)=>s+(x?.totalEvents||0),0);const eligible=Object.values(state.bySport).reduce((s,x)=>s+(x?.eligibleEvents||0),0);const strong=all.filter(x=>x.rating==='green').length;const cautious=all.filter(x=>x.rating==='yellow').length;
+  if(state.active==='all')el('todayTitle').textContent='🔥 Mai legerősebb lehetőségek minden sportból';else{const meta=SPORTS.find(x=>x[0]===state.active);el('todayTitle').textContent=`${meta?.[1]||''} ${meta?.[2]||state.active} – mai elemzés`;}
+  el('generatedAt').textContent=state.lastGenerated?`Készült: ${new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Budapest'}).format(state.lastGenerated)}`:'';
+  const stats=[['Betöltött sportok',`${loaded}/${SPORTS.length}`],['Mai események',total],['Oddsos jelöltek',eligible],['🟢 / 🟡',`${strong} / ${cautious}`]];
+  el('summaryStats').innerHTML=stats.map(([a,b])=>`<div class="stat"><span>${a}</span><strong>${b}</strong></div>`).join('');
+  if(loaded===SPORTS.length&&!top5().length)showMessage('Ma egyik támogatott sportágban sem talált a modell elég erős, oddsban is értéket mutató lehetőséget. Ez tudatos „nincs fogadás” eredmény, nem hiba.');else if(Object.keys(state.errors).length)showMessage(`Néhány sportág nem töltődött be: ${Object.entries(state.errors).map(([s,e])=>`${sportLabel(s)}: ${e}`).join(' • ')}`);else hideMessage();
 }
+function renderProgress(){el('sportProgress').innerHTML=SPORTS.map(([s,em,n])=>{const ok=Boolean(state.bySport[s]);const err=state.errors[s];const load=state.loading.has(s);return `<span class="progress-chip ${ok?'ok':err?'bad':load?'loading':''}">${em} ${n}: ${load?'…':ok?'✓':err?'!':'–'}</span>`}).join('');}
+function sportLabel(s){const x=SPORTS.find(a=>a[0]===s);return x?`${x[1]} ${x[2]}`:s;}
 
-async function loadHealth() {
-  try {
-    const h = await api('/.netlify/functions/health');
-    const badge = el('modeBadge');
-    if (h.apiConfigured && h.supabaseConfigured) {
-      badge.textContent = '● ÉLES • API + SUPABASE';
-      badge.className = 'badge badge-green';
-    } else if (h.apiConfigured) {
-      badge.textContent = '● ÉLES • SUPABASE NÉLKÜL';
-      badge.className = 'badge badge-yellow';
-    } else {
-      badge.textContent = '● DEMÓ • API KULCS KELL';
-      badge.className = 'badge badge-red';
-    }
-  } catch {
-    const badge = el('modeBadge');
-    badge.textContent = '● HIBA A BEÁLLÍTÁSBAN';
-    badge.className = 'badge badge-red';
-  }
-}
+function applyFilters(){const q=el('searchInput').value.trim().toLowerCase(),rating=el('ratingFilter').value,sort=el('sortSelect').value;let picks=state.active==='all'?top5():[...(state.bySport[state.active]?.picks||[])];if(q)picks=picks.filter(p=>`${p.home||''} ${p.away||''} ${p.league||''} ${p.country||''} ${p.sportLabel||''}`.toLowerCase().includes(q));if(rating!=='all')picks=picks.filter(p=>p.rating===rating);picks.sort((a,b)=>sort==='probability'?(b.probability||0)-(a.probability||0):sort==='kickoff'?new Date(a.kickoff||0)-new Date(b.kickoff||0):rankPicks(a,b));state.filtered=picks;renderPicks(picks);}
 
-async function loadToday() {
-  const btn = el('refreshBtn');
-  btn.disabled = true;
-  btn.textContent = 'Elemzés betöltése…';
-  try {
-    const data = await api('/.netlify/functions/today');
-    state.data = data;
-    renderSummary(data);
-    applyFilters();
-    if (data.demo) showMessage('Ez most DEMÓ adat. Amint beállítjuk az API_FOOTBALL_KEY környezeti változót a Netlify-ban, automatikusan valódi mai meccsek jelennek meg.');
-    else if (!data.persistence) showMessage('A focis API működik, de a Supabase még nincs beállítva. Emiatt az eredmények és a korábbi tippek még nem kerülnek tartósan mentésre.');
-    else hideMessage();
-  } catch (err) {
-    showMessage(`Nem sikerült betölteni a mai elemzést: ${err.message}`);
-    el('picksGrid').innerHTML = `<article class="card empty"><h3>Betöltési hiba</h3><p class="muted">${escapeHtml(err.message)}</p></article>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Mai elemzés frissítése';
-  }
-}
+function renderPicks(picks){const grid=el('picksGrid');if(state.active==='all'){el('sectionEyebrow').textContent='🔥 MAI TOP 5';el('sectionTitle').textContent='A legerősebb, értékkel rendelkező lehetőségek';}else{el('sectionEyebrow').textContent=sportLabel(state.active).toUpperCase();el('sectionTitle').textContent='Mai részletesen elemzett események';}el('resultCount').textContent=`${picks.length} elemzés`;grid.innerHTML='';if(!picks.length){const stillLoading=state.loading.size>0;if(stillLoading){grid.innerHTML='<article class="card empty"><div class="skeleton tall"></div><p class="muted">A sportmodellek még dolgoznak…</p></article>';}else grid.innerHTML='<article class="card empty"><h3>Nincs megfelelő találat</h3><p class="muted">A kiválasztott sportban/szűrésben nincs most olyan esemény, amely megfelel a feltételeknek.</p></article>';return;}
+  const tpl=el('pickTemplate');for(const p of picks){const node=tpl.content.cloneNode(true);const card=node.querySelector('.pick-card');node.querySelector('.league').textContent=`${p.sportEmoji||''} ${p.sportLabel||''}${p.country?` • ${p.country}`:''}${p.league?` • ${p.league}`:''}`;node.querySelector('.fixture').textContent=p.away?`${p.home} – ${p.away}`:(p.home||'Esemény');node.querySelector('.kickoff').textContent=fmtKickoff(p.kickoff);const rb=node.querySelector('.rating-badge');rb.textContent=p.rating==='green'?'🟢 Megfontolható':p.rating==='yellow'?'🟡 Óvatos':'🔴 Kihagyás';rb.classList.add(p.rating==='green'?'badge-green':p.rating==='yellow'?'badge-yellow':'badge-red');node.querySelector('.model-pill').textContent=p.modelName||`${p.sportLabel||''} modell`;node.querySelector('.recommendation').textContent=p.recommendation||'Kihagyás';node.querySelector('.market-odds').textContent=p.marketOdds?`@ ${fmtOdds(p.marketOdds)}`:'nincs odds';node.querySelector('.probability').textContent=fmtPct(p.probability);node.querySelector('.fair-odds').textContent=fmtOdds(p.fairOdds);node.querySelector('.odds').textContent=fmtOdds(p.marketOdds);const edge=Number(p.edge);node.querySelector('.edge').textContent=Number.isFinite(edge)?`${edge>=0?'+':''}${edge.toFixed(1)}%`:'—';node.querySelector('.probability-bar span').style.width=`${Math.max(0,Math.min(100,Number(p.probability)||0))}%`;node.querySelector('.prob-summary').textContent=probText(p);const reasons=node.querySelector('.reasons');(p.reasons?.length?p.reasons:['Nincs elég részletes indoklás.']).forEach(r=>{const li=document.createElement('li');li.textContent=r;reasons.appendChild(li)});node.querySelector('.coverage').textContent=p.coverage||'—';node.querySelector('.bookmakers').textContent=p.bookmakerCount?`${p.bookmakerCount} bookmaker`:'nincs';node.querySelector('.api-advice').textContent=p.apiAdvice||'—';card.dataset.rating=p.rating;grid.appendChild(node);}}
+function probText(p){const x=p.probabilities||{};if(Number.isFinite(x.draw))return `Hazai ${fmtPct(x.home)} • X ${fmtPct(x.draw)} • Vendég ${fmtPct(x.away)}`;if(Number.isFinite(x.home)&&Number.isFinite(x.away))return `${p.home||'A'} ${fmtPct(x.home)} • ${p.away||'B'} ${fmtPct(x.away)}`;return p.marketLabel||'';}
+function showMessage(t){const n=el('systemMessage');n.textContent=t;n.classList.remove('hidden')}function hideMessage(){el('systemMessage').classList.add('hidden')}
 
-async function loadPerformance() {
-  try {
-    const p = await api('/.netlify/functions/performance');
-    const items = [
-      ['Eltárolt tippek', p.total ?? 0],
-      ['Találati arány', p.hitRate != null ? fmtPct(p.hitRate) : '—'],
-      ['ROI', p.roi != null ? fmtPct(p.roi) : '—'],
-      ['Egység profit', p.profit != null ? Number(p.profit).toFixed(2) : '—']
-    ];
-    el('performance').innerHTML = items.map(([a,b]) => `<div class="performance-item"><span>${a}</span><strong>${b}</strong></div>`).join('');
-  } catch {
-    el('performance').innerHTML = '<div class="performance-item"><span>Állapot</span><strong>Még nincs adat</strong></div>';
-  }
-}
-
-function renderSummary(data) {
-  el('todayTitle').textContent = `${data.date || 'Mai'} – napi elemzés`;
-  el('generatedAt').textContent = data.generatedAt ? `Készült: ${new Intl.DateTimeFormat('hu-HU',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Budapest'}).format(new Date(data.generatedAt))}` : '';
-  const picks = data.picks || [];
-  const green = picks.filter(x => x.rating === 'green').length;
-  const yellow = picks.filter(x => x.rating === 'yellow').length;
-  const red = picks.filter(x => x.rating === 'red').length;
-  const stats = [
-    ['Mai összes meccs', data.totalFixtures ?? picks.length],
-    ['Részletesen elemzett', picks.length],
-    ['🟢 Megfontolható', green],
-    ['🔴 Kihagyás', red + (yellow ? 0 : 0)]
-  ];
-  el('summaryStats').innerHTML = stats.map(([a,b]) => `<div class="stat"><span>${a}</span><strong>${b}</strong></div>`).join('');
-}
-
-function applyFilters() {
-  const q = el('searchInput').value.trim().toLowerCase();
-  const rating = el('ratingFilter').value;
-  const sort = el('sortSelect').value;
-  let picks = [...(state.data?.picks || [])];
-  if (q) picks = picks.filter(p => `${p.home} ${p.away} ${p.league}`.toLowerCase().includes(q));
-  if (rating !== 'all') picks = picks.filter(p => p.rating === rating);
-  picks.sort((a,b) => {
-    if (sort === 'probability') return (b.probability || 0) - (a.probability || 0);
-    if (sort === 'kickoff') return new Date(a.kickoff || 0) - new Date(b.kickoff || 0);
-    return (b.edge || -999) - (a.edge || -999);
-  });
-  state.filtered = picks;
-  renderPicks(picks);
-}
-
-function renderPicks(picks) {
-  const grid = el('picksGrid');
-  el('resultCount').textContent = `${picks.length} meccs`;
-  grid.innerHTML = '';
-  if (!picks.length) {
-    grid.innerHTML = '<article class="card empty"><h3>Nincs találat</h3><p class="muted">A mostani szűréshez nincs megjeleníthető meccs.</p></article>';
-    return;
-  }
-  const tpl = el('pickTemplate');
-  for (const p of picks) {
-    const node = tpl.content.cloneNode(true);
-    const card = node.querySelector('.pick-card');
-    node.querySelector('.league').textContent = `${p.country ? p.country + ' • ' : ''}${p.league || 'Ismeretlen bajnokság'}`;
-    node.querySelector('.fixture').textContent = `${p.home} – ${p.away}`;
-    node.querySelector('.kickoff').textContent = fmtKickoff(p.kickoff);
-    const rb = node.querySelector('.rating-badge');
-    const label = p.rating === 'green' ? '🟢 Megfontolható' : p.rating === 'yellow' ? '🟡 Óvatos' : '🔴 Kihagyás';
-    rb.textContent = label;
-    rb.classList.add(p.rating === 'green' ? 'badge-green' : p.rating === 'yellow' ? 'badge-yellow' : 'badge-red');
-    node.querySelector('.recommendation').textContent = p.recommendation || 'Kihagyás';
-    node.querySelector('.market-odds').textContent = p.marketOdds ? `@ ${fmtOdds(p.marketOdds)}` : 'nincs odds';
-    node.querySelector('.probability').textContent = fmtPct(p.probability);
-    node.querySelector('.fair-odds').textContent = fmtOdds(p.fairOdds);
-    node.querySelector('.odds').textContent = fmtOdds(p.marketOdds);
-    const edge = Number(p.edge);
-    node.querySelector('.edge').textContent = Number.isFinite(edge) ? `${edge >= 0 ? '+' : ''}${edge.toFixed(1)}%` : '—';
-    node.querySelector('.probability-bar span').style.width = `${Math.max(0,Math.min(100,Number(p.probability)||0))}%`;
-    const probs = p.probabilities || {};
-    node.querySelector('.triple-prob').textContent = `1: ${fmtPct(probs.home)}   •   X: ${fmtPct(probs.draw)}   •   2: ${fmtPct(probs.away)}`;
-    const reasons = node.querySelector('.reasons');
-    (p.reasons?.length ? p.reasons : ['Nincs elég részletes indoklás.']).forEach(r => {
-      const li = document.createElement('li'); li.textContent = r; reasons.appendChild(li);
-    });
-    node.querySelector('.injuries').textContent = `${p.injuries?.home ?? 0} / ${p.injuries?.away ?? 0}`;
-    node.querySelector('.api-advice').textContent = p.apiAdvice || '—';
-    node.querySelector('.coverage').textContent = p.coverage || 'Közepes';
-    card.dataset.rating = p.rating;
-    grid.appendChild(node);
-  }
-}
-
-function showMessage(text) { const n=el('systemMessage'); n.textContent=text; n.classList.remove('hidden'); }
-function hideMessage() { el('systemMessage').classList.add('hidden'); }
-function escapeHtml(str) { return String(str).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c])); }
-
-el('refreshBtn').addEventListener('click', loadToday);
-el('searchInput').addEventListener('input', applyFilters);
-el('ratingFilter').addEventListener('change', applyFilters);
-el('sortSelect').addEventListener('change', applyFilters);
-
-loadHealth();
-loadToday();
-loadPerformance();
+document.querySelectorAll('.sport-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.sport-tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');state.active=btn.dataset.sport;renderAll();}));
+el('refreshBtn').addEventListener('click',loadAll);el('searchInput').addEventListener('input',applyFilters);el('ratingFilter').addEventListener('change',applyFilters);el('sortSelect').addEventListener('change',applyFilters);
+loadHealth();loadPerformance();renderProgress();loadAll();

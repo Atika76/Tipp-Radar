@@ -1,4 +1,4 @@
--- TippRadar – Supabase adatbázis
+-- Tipp Radar Sportelemző – Supabase adatbázis (v1/v2 kompatibilis)
 -- Ezt a teljes fájlt másold be a Supabase SQL Editorba, majd Run/Futtatás.
 
 create table if not exists public.app_cache (

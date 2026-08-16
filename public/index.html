@@ -4,10 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#101827" />
-  <meta name="description" content="TippRadar – adatvezérelt focimeccs-elemző és tippkövető webalkalmazás." />
-  <title>TippRadar – Focimeccs elemző</title>
+  <meta name="description" content="Tipp Radar – több sportágat külön modellel elemző, adatvezérelt sportfogadási elemző webalkalmazás." />
+  <title>Tipp Radar – Sportelemző</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  
   <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="favicon-16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -15,10 +14,13 @@
 </head>
 <body>
   <header class="topbar">
-    <div>
-      <p class="eyebrow">ADATVEZÉRELT FOCI ELEMZÉS</p>
-      <h1>TippRadar</h1>
-      <p class="subtitle">Ne azt keresd, ki a favorit. Azt keresd, hol van érték az oddsban.</p>
+    <div class="brand-wrap">
+      <img class="brand-icon" src="icon-192.png" alt="" />
+      <div>
+        <p class="eyebrow">ADATVEZÉRELT SPORT ELEMZÉS</p>
+        <h1>Tipp Radar</h1>
+        <p class="subtitle">Minden sporthoz saját modell. Nem minden nap kell fogadni – csak akkor, ha a számok és az odds között tényleg van érték.</p>
+      </div>
     </div>
     <div class="status-wrap">
       <span id="modeBadge" class="badge badge-neutral">Ellenőrzés…</span>
@@ -27,16 +29,30 @@
   </header>
 
   <main class="container">
+    <section class="sports-strip card" aria-label="Sportágak">
+      <button class="sport-tab active" data-sport="all">🔥 <span>Mai TOP 5</span></button>
+      <button class="sport-tab" data-sport="football">⚽ <span>Foci</span></button>
+      <button class="sport-tab" data-sport="basketball">🏀 <span>Kosárlabda</span></button>
+      <button class="sport-tab" data-sport="hockey">🏒 <span>Jégkorong</span></button>
+      <button class="sport-tab" data-sport="nfl">🏈 <span>NFL</span></button>
+      <button class="sport-tab" data-sport="baseball">⚾ <span>Baseball</span></button>
+      <button class="sport-tab" data-sport="handball">🤾 <span>Kézilabda</span></button>
+      <button class="sport-tab" data-sport="volleyball">🏐 <span>Röplabda</span></button>
+      <button class="sport-tab" data-sport="mma">🥊 <span>MMA</span></button>
+      <button class="sport-tab" data-sport="formula1">🏎️ <span>F1</span></button>
+    </section>
+
     <section class="hero-grid">
       <article class="card hero-card">
         <div class="section-head">
           <div>
             <p class="eyebrow">MAI ÖSSZKÉP</p>
-            <h2 id="todayTitle">Mai meccsek</h2>
+            <h2 id="todayTitle">🔥 Mai legerősebb lehetőségek minden sportból</h2>
           </div>
           <span id="generatedAt" class="muted"></span>
         </div>
         <div id="summaryStats" class="stats-grid"></div>
+        <div id="sportProgress" class="sport-progress"></div>
         <div id="systemMessage" class="notice hidden"></div>
       </article>
 
@@ -46,7 +62,7 @@
         <div id="performance" class="performance-grid">
           <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
         </div>
-        <p class="muted small">A rendszer csak a meccs előtt eltárolt tippeket számolja. Így utólag nem lehet „szépíteni” az eredményeket.</p>
+        <p class="muted small">Csak a meccs/esemény előtt eltárolt zöld tippeket számoljuk. Utólag nem lehet „szépíteni” az eredményeket.</p>
       </article>
     </section>
 
@@ -54,7 +70,7 @@
       <div class="filter-row">
         <label>
           <span>Szűrés</span>
-          <input id="searchInput" type="search" placeholder="Csapat vagy bajnokság…" />
+          <input id="searchInput" type="search" placeholder="Csapat, sport vagy bajnokság…" />
         </label>
         <label>
           <span>Értékelés</span>
@@ -79,8 +95,8 @@
     <section>
       <div class="section-head section-space">
         <div>
-          <p class="eyebrow">AJÁNLÁSOK</p>
-          <h2>Mai elemzett meccsek</h2>
+          <p id="sectionEyebrow" class="eyebrow">🔥 MAI TOP 5</p>
+          <h2 id="sectionTitle">A legerősebb, értékkel rendelkező lehetőségek</h2>
         </div>
         <span id="resultCount" class="muted"></span>
       </div>
@@ -92,22 +108,25 @@
 
     <section class="card info-card">
       <div>
-        <p class="eyebrow">MIT SZÁMOL?</p>
-        <h2>Nem „biztos tippeket”, hanem valószínűséget és értéket</h2>
+        <p class="eyebrow">KÜLÖN MODELL SPORTONKÉNT</p>
+        <h2>Nem ugyanazt a képletet húzzuk rá minden sportra</h2>
       </div>
       <div class="info-grid">
-        <div><strong>Forma és erőviszony</strong><span>API prediction + utóbbi teljesítmény</span></div>
-        <div><strong>Hazai / idegen</strong><span>A csapatok helyzetének külön kezelése</span></div>
-        <div><strong>Sérülések</strong><span>Elérhető hiányzók száma és hatása</span></div>
-        <div><strong>Piaci odds</strong><span>Több bookmaker 1X2 oddsainak mediánja</span></div>
-        <div><strong>Fair odds</strong><span>1 ÷ becsült valószínűség</span></div>
-        <div><strong>Value</strong><span>A becslés és a piac közti különbség</span></div>
+        <div><strong>⚽ Foci</strong><span>Prediction, 1X2, sérülések, odds-value és erős bajnokságszűrés.</span></div>
+        <div><strong>🏀 Kosárlabda</strong><span>Pontkülönbség, forma, pihenő, moneyline, hendikep és total.</span></div>
+        <div><strong>🏒 Jégkorong</strong><span>Gólforma, hazai előny, győztes és over/under.</span></div>
+        <div><strong>🏈 NFL</strong><span>Pontkülönbség, pihenő, sérülések, spread és total.</span></div>
+        <div><strong>⚾ Baseball</strong><span>Futásátlag, forma, moneyline és total.</span></div>
+        <div><strong>🤾 Kézilabda</strong><span>Gólkülönbség, forma, hendikep és total.</span></div>
+        <div><strong>🏐 Röplabda</strong><span>Szettforma és győzelmi arány, moneyline.</span></div>
+        <div><strong>🥊 MMA</strong><span>Harcos-mérleg + fight winner odds; kevés adatnál automatikus kihagyás.</span></div>
+        <div><strong>🏎️ F1</strong><span>Verseny és pilótarangsor; ha nincs API odds, a rendszer nem talál ki value tippet.</span></div>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>TippRadar • elemzőeszköz, nem garantált fogadási eredmény. A sportfogadás kockázattal jár.</p>
+    <p>Tipp Radar • elemzőeszköz, nem garantált fogadási eredmény. A sportfogadás kockázattal jár.</p>
   </footer>
 
   <template id="pickTemplate">
@@ -120,6 +139,7 @@
         </div>
         <span class="rating-badge"></span>
       </div>
+      <div class="model-pill"></div>
       <div class="recommendation-box">
         <span class="market-label">AJÁNLÁS</span>
         <strong class="recommendation"></strong>
@@ -132,14 +152,14 @@
         <div><span>Érték</span><strong class="edge"></strong></div>
       </div>
       <div class="probability-bar"><span></span></div>
-      <div class="triple-prob"></div>
+      <div class="prob-summary"></div>
       <details>
         <summary>Miért ezt mondja?</summary>
         <ul class="reasons"></ul>
         <div class="detail-grid">
-          <div><span>Sérültek / hiányzók</span><strong class="injuries"></strong></div>
-          <div><span>API tanács</span><strong class="api-advice"></strong></div>
           <div><span>Adatminőség</span><strong class="coverage"></strong></div>
+          <div><span>Piaci források</span><strong class="bookmakers"></strong></div>
+          <div><span>Modell megjegyzés</span><strong class="api-advice"></strong></div>
         </div>
       </details>
     </article>

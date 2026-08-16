@@ -1,6 +1,6 @@
 {
-  "name": "TippRadar – Focimeccs elemző",
-  "short_name": "TippRadar",
+  "name": "Tipp Radar – Sportelemző",
+  "short_name": "Tipp Radar",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07101e",
@@ -38,5 +38,6 @@
         }
       ]
     }
-  ]
+  ],
+  "description": "Több sportágat külön modellel elemző adatvezérelt sportelemző."
 }
